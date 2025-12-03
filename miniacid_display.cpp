@@ -535,12 +535,12 @@ void MiniAcidDisplay::drawSequencerPage(int x, int y, int w, int h) {
   if (lane_h < 12) lane_h = 12;
 
   int lane_y = y + title_h + 4;
-  print(x, lane_y, "303A pattern (R to randomize)");
+  print(x, lane_y, "303A pattern (I to randomize)");
   lane_y += lh;
   draw303Lane(x, lane_y, w, lane_h, 0);
 
   lane_y += lane_h + 6;
-  print(x, lane_y, "303B pattern (Y to randomize)");
+  print(x, lane_y, "303B pattern (O to randomize)");
   lane_y += lh;
   draw303Lane(x, lane_y, w, lane_h, 1);
 
@@ -565,7 +565,7 @@ void MiniAcidDisplay::drawDrumSequencerPage(int x, int y, int w, int h) {
   if (lane_h < 12) lane_h = 12;
 
   int lane_y = y + title_h + 4;
-  print(x, lane_y, "Drums Pattern (T to randomize)");
+  print(x, lane_y, "Drums Pattern (P to randomize)");
   lane_y += lh;
   drawDrumLane(x, lane_y, w, lane_h);
 }
