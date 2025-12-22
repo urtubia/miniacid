@@ -933,11 +933,13 @@ void MiniAcid::applySceneStateFromManager() {
   voice303.setParameter(TB303ParamId::Resonance, paramsA.resonance);
   voice303.setParameter(TB303ParamId::EnvAmount, paramsA.envAmount);
   voice303.setParameter(TB303ParamId::EnvDecay, paramsA.envDecay);
+  voice303.setParameter(TB303ParamId::Oscillator, static_cast<float>(paramsA.oscType));
 
   voice3032.setParameter(TB303ParamId::Cutoff, paramsB.cutoff);
   voice3032.setParameter(TB303ParamId::Resonance, paramsB.resonance);
   voice3032.setParameter(TB303ParamId::EnvAmount, paramsB.envAmount);
   voice3032.setParameter(TB303ParamId::EnvDecay, paramsB.envDecay);
+  voice3032.setParameter(TB303ParamId::Oscillator, static_cast<float>(paramsB.oscType));
 
   patternModeDrumPatternIndex_ = sceneManager_.getCurrentDrumPatternIndex();
   patternModeSynthPatternIndex_[0] = sceneManager_.getCurrentSynthPatternIndex(0);
@@ -971,6 +973,7 @@ void MiniAcid::syncSceneStateToManager() {
   paramsA.resonance = voice303.parameterValue(TB303ParamId::Resonance);
   paramsA.envAmount = voice303.parameterValue(TB303ParamId::EnvAmount);
   paramsA.envDecay = voice303.parameterValue(TB303ParamId::EnvDecay);
+  paramsA.oscType = voice303.oscillatorIndex();
   sceneManager_.setSynthParameters(0, paramsA);
 
   SynthParameters paramsB;
@@ -978,6 +981,7 @@ void MiniAcid::syncSceneStateToManager() {
   paramsB.resonance = voice3032.parameterValue(TB303ParamId::Resonance);
   paramsB.envAmount = voice3032.parameterValue(TB303ParamId::EnvAmount);
   paramsB.envDecay = voice3032.parameterValue(TB303ParamId::EnvDecay);
+  paramsB.oscType = voice3032.oscillatorIndex();
   sceneManager_.setSynthParameters(1, paramsB);
 }
 
@@ -1086,4 +1090,3 @@ void PatternGenerator::generateRandomDrumPattern(DrumPatternSet& patternSet) {
     }
   }
 }
-

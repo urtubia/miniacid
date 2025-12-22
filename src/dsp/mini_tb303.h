@@ -21,6 +21,7 @@ enum class TB303ParamId : uint8_t {
   Resonance,
   EnvAmount,
   EnvDecay,
+  Oscillator,
   MainVolume,
   Count
 };
@@ -38,13 +39,20 @@ public:
   void setParameter(TB303ParamId id, float value);
   void adjustParameter(TB303ParamId id, int steps);
   float parameterValue(TB303ParamId id) const;
+  int oscillatorIndex() const;
 
 private:
   float oscSaw();
+  float oscSquare(float saw);
+  float oscSuperSaw();
+  float oscillatorSample();
   float svfProcess(float input);
   void initParameters();
 
+  static constexpr int kSuperSawOscCount = 6;
+
   float phase;
+  float superPhases[kSuperSawOscCount];
   float freq;       // current frequency (Hz)
   float targetFreq; // slide target
   float slideSpeed; // how fast we slide toward target
@@ -60,4 +68,3 @@ private:
   Parameter params[static_cast<int>(TB303ParamId::Count)];
   ChamberlinFilter filter;
 };
-

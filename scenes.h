@@ -75,6 +75,7 @@ struct SynthParameters {
   float resonance = 0.6f;
   float envAmount = 400.0f;
   float envDecay = 420.0f;
+  int oscType = 0;
 };
 
 enum class SongTrack : uint8_t {

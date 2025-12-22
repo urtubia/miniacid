@@ -181,6 +181,7 @@ bool deserializeSynthParameters(ArduinoJson::JsonVariantConst value, SynthParame
   auto resonance = obj["resonance"];
   auto envAmount = obj["envAmount"];
   auto envDecay = obj["envDecay"];
+  auto oscType = obj["oscType"];
 
   if (!cutoff.isNull()) {
     if (!cutoff.is<float>() && !cutoff.is<int>()) return false;
@@ -197,6 +198,10 @@ bool deserializeSynthParameters(ArduinoJson::JsonVariantConst value, SynthParame
   if (!envDecay.isNull()) {
     if (!envDecay.is<float>() && !envDecay.is<int>()) return false;
     params.envDecay = valueToFloat(envDecay, params.envDecay);
+  }
+  if (!oscType.isNull()) {
+    if (!oscType.is<int>()) return false;
+    params.oscType = oscType.as<int>();
   }
 
   return true;
@@ -424,6 +429,8 @@ void SceneJsonObserver::handlePrimitiveNumber(double value, bool isInteger) {
       synthParameters_[synthIdx].envAmount = fval;
     } else if (lastKey_ == "envDecay") {
       synthParameters_[synthIdx].envDecay = fval;
+    } else if (lastKey_ == "oscType") {
+      synthParameters_[synthIdx].oscType = static_cast<int>(value);
     }
     return;
   }
@@ -954,6 +961,7 @@ void SceneManager::buildSceneDocument(ArduinoJson::JsonDocument& doc) const {
     param["resonance"] = synthParameters_[i].resonance;
     param["envAmount"] = synthParameters_[i].envAmount;
     param["envDecay"] = synthParameters_[i].envDecay;
+    param["oscType"] = synthParameters_[i].oscType;
   }
 }
 

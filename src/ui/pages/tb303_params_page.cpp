@@ -89,6 +89,7 @@ void Synth303ParamsPage::draw(IGfx& gfx, int x, int y, int w, int h)
   const Parameter& pRes = mini_acid_.parameter303(TB303ParamId::Resonance, voice_index_);
   const Parameter& pEnv = mini_acid_.parameter303(TB303ParamId::EnvAmount, voice_index_);
   const Parameter& pDec = mini_acid_.parameter303(TB303ParamId::EnvDecay, voice_index_);
+  const Parameter& pOsc = mini_acid_.parameter303(TB303ParamId::Oscillator, voice_index_);
 
   Knob cutoff{pCut.label(), pCut.value(), pCut.min(), pCut.max(), pCut.unit()};
   Knob res{pRes.label(), pRes.value(), pRes.min(), pRes.max(), pRes.unit()};
@@ -108,6 +109,14 @@ void Synth303ParamsPage::draw(IGfx& gfx, int x, int y, int w, int h)
   print(cx2 + delta_x_for_controls, center_y + delta_y_for_controls, "S/X");
   print(cx3 + delta_x_for_controls, center_y + delta_y_for_controls, "D/C");
   print(cx4 + delta_x_for_controls, center_y + delta_y_for_controls, "F/V");
+
+  const char* oscLabel = pOsc.optionLabel();
+  if (!oscLabel) oscLabel = "";
+  gfx_.setTextColor(COLOR_WHITE);
+  snprintf(buf, sizeof(buf), "OSC: %s (T/G)", oscLabel);
+  // int oscTextX = x + x_margin + (usable_w - textWidth(gfx, buf)) / 2;
+  int oscTextX = x + x_margin + 10;
+  gfx_.drawText(oscTextX, y + h - 10, buf);
 
   gfx_.setTextColor(COLOR_WHITE);
 }
@@ -131,6 +140,18 @@ bool Synth303ParamsPage::handleEvent(UIEvent& ui_event)
   bool event_handled = false;
   int steps = 5;
   switch(ui_event.key){
+    case 't':
+      withAudioGuard([&]() {
+        mini_acid_.adjust303Parameter(TB303ParamId::Oscillator, 1, voice_index_);
+      });
+      event_handled = true;
+      break;
+    case 'g':
+      withAudioGuard([&]() {
+        mini_acid_.adjust303Parameter(TB303ParamId::Oscillator, -1, voice_index_);
+      });
+      event_handled = true;
+      break;
     case 'a':
       withAudioGuard([&]() { 
         mini_acid_.adjust303Parameter(TB303ParamId::Cutoff, steps, voice_index_); 
@@ -189,4 +210,3 @@ bool Synth303ParamsPage::handleEvent(UIEvent& ui_event)
   }
   return event_handled;
 }
-

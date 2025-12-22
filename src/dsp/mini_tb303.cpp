@@ -3,6 +3,10 @@
 #include <math.h>
 #include <stdlib.h>
 
+namespace {
+const char* const kOscillatorOptions[] = {"saw", "sqr", "spr"};
+} // namespace
+
 ChamberlinFilter::ChamberlinFilter(float sampleRate) : _lp(0.0f), _bp(0.0f), _sampleRate(sampleRate) {
   if (_sampleRate <= 0.0f) _sampleRate = 44100.0f;
 }
@@ -53,6 +57,10 @@ TB303Voice::TB303Voice(float sampleRate)
 void TB303Voice::reset() {
   initParameters();
   phase = 0.0f;
+  for (int i = 0; i < kSuperSawOscCount; ++i) {
+    float seed = (static_cast<float>(i) + 1.0f) * 0.137f;
+    superPhases[i] = seed - floorf(seed);
+  }
   freq = 110.0f;
   targetFreq = 110.0f;
   slideSpeed = 0.001f;
@@ -93,6 +101,52 @@ float TB303Voice::oscSaw() {
   return 2.0f * phase - 1.0f;
 }
 
+float TB303Voice::oscSquare(float saw) {
+  return saw >= 0.0f ? 1.0f : -1.0f;
+}
+
+float TB303Voice::oscSuperSaw() {
+  static const float kSuperSawDetune[kSuperSawOscCount] = {
+    -0.019f, 0.019f, -0.012f, 0.012f, -0.0065f, 0.0065f
+  };
+
+  float basePhaseInc = freq * invSampleRate;
+  phase += basePhaseInc;
+  if (phase >= 1.0f) {
+    phase -= 1.0f;
+  }
+
+  float sum = 2.0f * phase - 1.0f;
+
+  for (int i = 0; i < kSuperSawOscCount; ++i) {
+    float detunedFreq = freq * (1.0f + kSuperSawDetune[i]);
+    float inc = detunedFreq * invSampleRate;
+    superPhases[i] += inc;
+    if (superPhases[i] >= 1.0f) {
+      superPhases[i] -= floorf(superPhases[i]);
+    } else if (superPhases[i] < 0.0f) {
+      superPhases[i] += 1.0f;
+    }
+    sum += 2.0f * superPhases[i] - 1.0f;
+  }
+
+  // constexpr float kGain = 1.0f / (1.0f + TB303Voice::kSuperSawOscCount);
+  constexpr float kGain = 1.0f / (TB303Voice::kSuperSawOscCount - 1);
+  return sum * kGain;
+}
+
+float TB303Voice::oscillatorSample() {
+  int oscIdx = oscillatorIndex();
+  if (oscIdx == 1) {
+    float saw = oscSaw();
+    return oscSquare(saw);
+  }
+  if (oscIdx == 2) {
+    return oscSuperSaw();
+  }
+  return oscSaw();
+}
+
 float TB303Voice::svfProcess(float input) {
   // Slide toward target frequency
   freq += (targetFreq - freq) * slideSpeed;
@@ -127,7 +181,7 @@ float TB303Voice::process() {
     return 0.0f;
   }
 
-  float osc = oscSaw();
+  float osc = oscillatorSample();
   float out = svfProcess(osc);
 
   return out * amp;
@@ -149,11 +203,15 @@ float TB303Voice::parameterValue(TB303ParamId id) const {
   return params[static_cast<int>(id)].value();
 }
 
+int TB303Voice::oscillatorIndex() const {
+  return params[static_cast<int>(TB303ParamId::Oscillator)].optionIndex();
+}
+
 void TB303Voice::initParameters() {
   params[static_cast<int>(TB303ParamId::Cutoff)] = Parameter("cut", "Hz", 60.0f, 2500.0f, 800.0f, (2500.f - 60.0f) / 128);
   params[static_cast<int>(TB303ParamId::Resonance)] = Parameter("res", "", 0.05f, 0.85f, 0.6f, (0.85f - 0.05f) / 128);
   params[static_cast<int>(TB303ParamId::EnvAmount)] = Parameter("env", "Hz", 0.0f, 2000.0f, 400.0f, (2000.0f - 0.0f) / 128);
   params[static_cast<int>(TB303ParamId::EnvDecay)] = Parameter("dec", "ms", 20.0f, 2200.0f, 420.0f, (2200.0f - 20.0f) / 128);
+  params[static_cast<int>(TB303ParamId::Oscillator)] = Parameter("osc", "", kOscillatorOptions, 3, 0);
   params[static_cast<int>(TB303ParamId::MainVolume)] = Parameter("vol", "", 0.0f, 1.0f, 0.8f, 1.0f / 128);
 }
-
