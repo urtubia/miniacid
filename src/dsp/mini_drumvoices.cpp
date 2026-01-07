@@ -41,19 +41,31 @@ void DrumSynthVoice::reset() {
   openHatEnvAmp = 0.0f; openHatToneEnv = 0.0f; openHatActive = false;
   for (int i = 0; i < 6; ++i) { hatPhases[i] = 0.0f; openHatPhases[i] = 0.0f; }
 
-  // Biquad BP (~7.1k, Q ~0.9) coefficients
-  float f0 = 7100.0f;
-  float w0 = 2.0f * 3.14159265f * f0 / sampleRate;
-  float alpha = sinf(w0) / (2.0f * 0.9f);
-  float cosw0 = cosf(w0);
-  bp_b0 = alpha;
-  bp_b1 = 0.0f;
-  bp_b2 = -alpha;
-  float a0 = 1.0f + alpha;
-  bp_a1 = -2.0f * cosw0;
-  bp_a2 = 1.0f - alpha;
-  // normalize
-  bp_b0 /= a0; bp_b1 /= a0; bp_b2 /= a0; bp_a1 /= a0; bp_a2 /= a0;
+  // Biquad BP coefficients
+  // CH center ~7100 Hz, Q ~0.9 (classic 606 hats band-pass)
+  {
+    float f0 = 7100.0f;
+    float w0 = 2.0f * 3.14159265f * f0 / sampleRate;
+    float alpha = sinf(w0) / (2.0f * 0.9f);
+    float cosw0 = cosf(w0);
+    float b0 = alpha, b1 = 0.0f, b2 = -alpha;
+    float a0 = 1.0f + alpha;
+    float a1 = -2.0f * cosw0;
+    float a2 = 1.0f - alpha;
+    bp_b0_ch = b0 / a0; bp_b1_ch = b1 / a0; bp_b2_ch = b2 / a0; bp_a1_ch = a1 / a0; bp_a2_ch = a2 / a0;
+  }
+  // OH center slightly higher (~7800 Hz), Q ~0.85 for brighter, higher perceived pitch
+  {
+    float f0 = 7800.0f;
+    float w0 = 2.0f * 3.14159265f * f0 / sampleRate;
+    float alpha = sinf(w0) / (2.0f * 0.85f);
+    float cosw0 = cosf(w0);
+    float b0 = alpha, b1 = 0.0f, b2 = -alpha;
+    float a0 = 1.0f + alpha;
+    float a1 = -2.0f * cosw0;
+    float a2 = 1.0f - alpha;
+    bp_b0_oh = b0 / a0; bp_b1_oh = b1 / a0; bp_b2_oh = b2 / a0; bp_a1_oh = a1 / a0; bp_a2_oh = a2 / a0;
+  }
 
   hatBP_x1 = hatBP_x2 = hatBP_y1 = hatBP_y2 = 0.0f;
   openHatBP_x1 = openHatBP_x2 = openHatBP_y1 = openHatBP_y2 = 0.0f;
@@ -215,8 +227,8 @@ float DrumSynthVoice::processHat() {
   }
   mix *= (1.0f / 6.0f);
 
-  // band-pass around ~7.1k (robust biquad)
-  float bp = biquad_bp(mix, bp_b0, bp_b1, bp_b2, bp_a1, bp_a2,
+  // band-pass around ~7.1k (robust biquad, CH coefficients)
+  float bp = biquad_bp(mix, bp_b0_ch, bp_b1_ch, bp_b2_ch, bp_a1_ch, bp_a2_ch,
                        hatBP_x1, hatBP_x2, hatBP_y1, hatBP_y2);
 
   // VCA + gentle saturation
@@ -231,7 +243,7 @@ float DrumSynthVoice::processHat() {
   return yhp * 0.9f;
 }
 
-// --- Open Hat (same source; longer decay; choke by CH trigger) ---
+// --- Open Hat (brighter): same source; higher BP center; longer decay; choke by CH trigger) ---
 float DrumSynthVoice::processOpenHat() {
   if (!openHatActive) return 0.0f;
 
@@ -248,13 +260,14 @@ float DrumSynthVoice::processOpenHat() {
   }
   mix *= (1.0f / 6.0f);
 
-  float bp = biquad_bp(mix, bp_b0, bp_b1, bp_b2, bp_a1, bp_a2,
+  // band-pass with OH coefficients (higher center for brighter pitch)
+  float bp = biquad_bp(mix, bp_b0_oh, bp_b1_oh, bp_b2_oh, bp_a1_oh, bp_a2_oh,
                        openHatBP_x1, openHatBP_x2, openHatBP_y1, openHatBP_y2);
 
   float vca = bp * openHatEnvAmp;
-  float driven = tanhf(vca * 1.6f);
+  float driven = tanhf(vca * 1.65f);
 
-  const float a = 0.98f;
+  const float a = 0.985f; // slightly less HP than CH to keep airy top
   float yhp = a * (openHatHP_y1 + driven - openHatHP_x1);
   openHatHP_y1 = yhp; openHatHP_x1 = driven;
 
