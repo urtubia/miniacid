@@ -39,6 +39,9 @@ public:
   // Bus processing (apply one-knob compressor to the mixed sum)
   float processBus(float mixSample);
 
+  // Snare
+  float snareHpPrev;   // extra high-pass memory
+
   // Parameters
   const Parameter& parameter(DrumParamId id) const;
   void setParameter(DrumParamId id, float value);

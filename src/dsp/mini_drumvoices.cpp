@@ -29,9 +29,13 @@ void DrumSynthVoice::reset() {
   kickActive = false;
 
   // Snare
-  snareEnvAmp = 0.0f; snareToneEnv = 0.0f; snareActive = false;
-  snareBp = 0.0f; snareLp = 0.0f;
-  snareTonePhase = 0.0f; snareTonePhase2 = 0.0f;
+  snareEnvAmp = 0.0f;
+  snareToneEnv = 0.0f;
+  snareActive = false;
+  snareBp = 0.0f;
+  snareLp = 0.0f;
+  snareTonePhase = 0.0f;
+  snareTonePhase2 = 0.0f;
 
   // Hats
   hatEnvAmp = 0.0f; hatToneEnv = 0.0f; hatActive = false;
@@ -112,7 +116,7 @@ void DrumSynthVoice::triggerKick() {
 
 void DrumSynthVoice::triggerSnare() {
   snareActive = true;
-  snareEnvAmp  = 1.1f;
+  snareEnvAmp = 1.1f;
   snareToneEnv = 1.0f;
   snareTonePhase = 0.0f;
   snareTonePhase2 = 0.0f;
@@ -192,26 +196,46 @@ float DrumSynthVoice::processKick() {
 }
 
 float DrumSynthVoice::processSnare() {
-  if (!snareActive) return 0.0f;
+  if (!snareActive)
+    return 0.0f;
 
-  snareEnvAmp  *= 0.9983f;
-  snareToneEnv *= 0.94f;
-  if (snareEnvAmp < 0.0002f) { snareActive = false; return 0.0f; }
+  // --- ENVELOPES ---
+  // 808: Long noise decay, short tone decay
+  snareEnvAmp *= 0.9985f;   // slow decay, long tail
+  snareToneEnv *= 0.99999f;    // short tone "tick"
 
-  float n = frand();
-  const float f = 0.30f;
-  snareBp += f * (n - snareLp - 0.22f * snareBp);
+  if (snareEnvAmp < 0.0002f) {
+    snareActive = false;
+    return 0.0f;
+  }
+
+  // --- NOISE PROCESSING ---
+  float n = frand(); // assume 0.0–1.0 random
+
+  // 808: Noise is brighter with a bit of highpass emphasis
+  // simple bandpass around ~1–2 kHz
+  float f = 0.28f;
+  snareBp += f * (n - snareLp - 0.20f * snareBp);
   snareLp += f * snareBp;
-  float noiseHP  = n - snareLp;
-  float noiseOut = snareBp * 0.38f + noiseHP * 0.62f;
 
-  snareTonePhase  += 330.0f * invSampleRate; if (snareTonePhase  >= 1.0f) snareTonePhase  -= 1.0f;
-  snareTonePhase2 += 180.0f * invSampleRate; if (snareTonePhase2 >= 1.0f) snareTonePhase2 -= 1.0f;
+  // high fizz (808 has a lot of it)
+  float noiseHP = n - snareLp;    // crude highpass
+  float noiseOut = snareBp * 0.35f + noiseHP * 0.65f;
+
+  // --- TONE (two sines, tuned to classic 808) ---
+  // ~330 Hz + ~180 Hz slight mix, short decay
+  snareTonePhase += 330.0f * invSampleRate;
+  if (snareTonePhase >= 1.0f) snareTonePhase -= 1.0f;
+  snareTonePhase2 += 180.0f * invSampleRate;
+  if (snareTonePhase2 >= 1.0f) snareTonePhase2 -= 1.0f;
+
   float toneA = sinf(2.0f * 3.14159265f * snareTonePhase);
   float toneB = sinf(2.0f * 3.14159265f * snareTonePhase2);
   float tone = (toneA * 0.55f + toneB * 0.45f) * snareToneEnv;
 
-  float out = noiseOut * 0.78f + tone * 0.55f;
+  // --- MIX ---
+  // 808: tone only supports transient, noise dominates sustain
+  float out = noiseOut * 0.75f + tone * 0.65f;
   return out * snareEnvAmp;
 }
 
