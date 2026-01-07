@@ -1,90 +1,54 @@
 #include "mini_drumvoices.h"
 #include <math.h>
-#include <stdlib.h>
 
-// Utility: fast clamp
-static inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+// ---------------- Utility ----------------
+static inline float fast_tanhf(float x) {
+  // 3rd-order polynomial approximation is plenty for drum drive
+  const float x2 = x * x;
+  return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+}
 
-DrumSynthVoice::DrumSynthVoice(float sr)
-  : sampleRate(sr),
-    invSampleRate(0.0f) {
-  setSampleRate(sr);
+DrumSynthVoice::DrumSynthVoice(float sampleRate)
+  : sampleRate(sampleRate), invSampleRate(0.0f), rngState(0x12345678u) {
+  setSampleRate(sampleRate);
   reset();
 }
 
 void DrumSynthVoice::reset() {
-  // Kick (808-ish)
-  kickPhase = 0.0f;
-  kickEnvAmp = 0.0f;
-  kickEnvPitch = 0.0f;
+  // Kick
+  kickPhase = 0.0f; kickFreq = 55.0f;
+  kickEnvAmp = 0.0f; kickEnvPitch = 0.0f; kickClickEnv = 0.0f;
   kickActive = false;
 
   // Snare
-  snareEnvAmp = 0.0f;
-  snareToneEnv = 0.0f;
-  snareActive = false;
-  snareBp = 0.0f;
-  snareLp = 0.0f;
-  snareTonePhase = 0.0f;
-  snareTonePhase2 = 0.0f;
+  snareEnvAmp = 0.0f; snareToneEnv = 0.0f; snareActive = false;
+  snareBp = 0.0f; snareLp = 0.0f;
+  snareTonePhase = 0.0f; snareTonePhase2 = 0.0f;
 
-  // 606 Schmitt-trigger oscillator set (analysis-derived)
-  hatOscFreqs[0] = 245.10f;
-  hatOscFreqs[1] = 308.60f;
-  hatOscFreqs[2] = 367.60f;
-  hatOscFreqs[3] = 416.60f;
-  hatOscFreqs[4] = 438.50f;
-  hatOscFreqs[5] = 625.00f;
-
-  // Hats state
+  // Hats
   hatEnvAmp = 0.0f; hatToneEnv = 0.0f; hatActive = false;
+  hatHp = 0.0f; hatPrev = 0.0f;
+  for (int i = 0; i < 6; ++i) hatPh[i] = 0.0f;
+
   openHatEnvAmp = 0.0f; openHatToneEnv = 0.0f; openHatActive = false;
-  for (int i = 0; i < 6; ++i) { hatPhases[i] = 0.0f; openHatPhases[i] = 0.0f; }
-
-  // Biquad BP coefficients
-  // CH center ~7100 Hz, Q ~0.9 (classic 606 hats band-pass)
-  {
-    float f0 = 7100.0f;
-    float w0 = 2.0f * 3.14159265f * f0 / sampleRate;
-    float alpha = sinf(w0) / (2.0f * 0.9f);
-    float cosw0 = cosf(w0);
-    float b0 = alpha, b1 = 0.0f, b2 = -alpha;
-    float a0 = 1.0f + alpha;
-    float a1 = -2.0f * cosw0;
-    float a2 = 1.0f - alpha;
-    bp_b0_ch = b0 / a0; bp_b1_ch = b1 / a0; bp_b2_ch = b2 / a0; bp_a1_ch = a1 / a0; bp_a2_ch = a2 / a0;
-  }
-  // OH center slightly higher (~7800 Hz), Q ~0.85 for brighter, higher perceived pitch
-  {
-    float f0 = 7800.0f;
-    float w0 = 2.0f * 3.14159265f * f0 / sampleRate;
-    float alpha = sinf(w0) / (2.0f * 0.85f);
-    float cosw0 = cosf(w0);
-    float b0 = alpha, b1 = 0.0f, b2 = -alpha;
-    float a0 = 1.0f + alpha;
-    float a1 = -2.0f * cosw0;
-    float a2 = 1.0f - alpha;
-    bp_b0_oh = b0 / a0; bp_b1_oh = b1 / a0; bp_b2_oh = b2 / a0; bp_a1_oh = a1 / a0; bp_a2_oh = a2 / a0;
-  }
-
-  hatBP_x1 = hatBP_x2 = hatBP_y1 = hatBP_y2 = 0.0f;
-  openHatBP_x1 = openHatBP_x2 = openHatBP_y1 = openHatBP_y2 = 0.0f;
-
-  // Post-VCA HP (one-pole): y[n] = a*(y[n-1] + x[n] - x[n-1])
-  hatHP_y1 = hatHP_x1 = 0.0f;
-  openHatHP_y1 = openHatHP_x1 = 0.0f;
+  openHatHp = 0.0f; openHatPrev = 0.0f;
+  for (int i = 0; i < 6; ++i) openHatPh[i] = 0.0f;
 
   // Toms
-  midTomPhase = 0.0f; midTomEnv = 0.0f; midTomActive = false;
-  highTomPhase = 0.0f; highTomEnv = 0.0f; highTomActive = false;
+  midTomPhase = 0.0f; midTomEnv = 0.0f; midTomPitchEnv = 0.0f; midTomActive = false;
+  highTomPhase = 0.0f; highTomEnv = 0.0f; highTomPitchEnv = 0.0f; highTomActive = false;
 
   // Rim
-  rimPhase = 0.0f; rimEnv = 0.0f; rimActive = false;
+  rimPhase = 0.0f; rimEnv = 0.0f; rimBp = 0.0f; rimLp = 0.0f; rimActive = false;
 
   // Clap
-  clapEnv = 0.0f; clapTrans = 0.0f; clapNoise = 0.0f; clapActive = false; clapDelay = 0.0f;
+  clapEnv = 0.0f; clapTrans = 0.0f; clapNoiseSeed = 0.0f; clapActive = false;
+  clapTime = 0.0f; clapIdx = 0; clapCombLen = (int)(0.008f * sampleRate); // ~8 ms
+  if (clapCombLen < 64) clapCombLen = 64;
+  if (clapCombLen > kClapBufMax) clapCombLen = kClapBufMax;
+  for (int i = 0; i < kClapBufMax; ++i) clapBuf[i] = 0.0f;
 
-  // Parameters
+  // Params
   params[static_cast<int>(DrumParamId::MainVolume)] = Parameter("vol", "", 0.0f, 1.0f, 0.8f, 1.0f / 128);
 }
 
@@ -92,243 +56,308 @@ void DrumSynthVoice::setSampleRate(float sampleRateHz) {
   if (sampleRateHz <= 0.0f) sampleRateHz = 44100.0f;
   sampleRate = sampleRateHz;
   invSampleRate = 1.0f / sampleRate;
+
+  // Hat oscillator target freqs (approx 808 metal partials, non-harmonic)
+  const float f[6] = { 2150.0f, 2700.0f, 3200.0f, 4100.0f, 5300.0f, 6600.0f };
+  const float fo[6] = { 1900.0f, 2500.0f, 3000.0f, 3900.0f, 5100.0f, 6300.0f };
+  for (int i = 0; i < 6; ++i) {
+    hatInc[i] = f[i] * invSampleRate;
+    openHatInc[i] = fo[i] * invSampleRate;
+  }
+
+  // Clamp comb length to buffer
+  clapCombLen = (int)(0.008f * sampleRate); // ~8 ms
+  if (clapCombLen < 64) clapCombLen = 64;
+  if (clapCombLen > kClapBufMax) clapCombLen = kClapBufMax;
 }
 
-// --- Triggers ---
+// ---------------- RNG ----------------
+float DrumSynthVoice::frand() {
+  // xorshift32, returns [-1, 1]
+  uint32_t x = rngState;
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  rngState = x;
+  const float u = (float)(x) * (1.0f / 4294967296.0f); // [0,1)
+  return u * 2.0f - 1.0f;
+}
+
+// ---------------- Triggers ----------------
 void DrumSynthVoice::triggerKick() {
   kickActive = true;
   kickPhase = 0.0f;
-  kickEnvAmp = 1.0f;        // main amplitude envelope
-  kickEnvPitch = 1.0f;      // fast attack pitch envelope
+  // Tight 606-like envelopes
+  kickEnvAmp   = 1.15f;     // fast decay, but a bit hot initially
+  kickEnvPitch = 1.0f;      // quick pitch drop
+  kickClickEnv = 1.0f;      // short click at onset
+  kickFreq     = 60.0f;     // start slightly above final for punch
 }
 
 void DrumSynthVoice::triggerSnare() {
   snareActive = true;
-  snareEnvAmp = 1.0f;
-  snareToneEnv = 1.0f;
+  snareEnvAmp  = 1.1f;      // noise sustain
+  snareToneEnv = 1.0f;      // tone tick
   snareTonePhase = 0.0f;
   snareTonePhase2 = 0.0f;
 }
 
 void DrumSynthVoice::triggerHat() {
   hatActive = true;
-  hatEnvAmp = 1.0f;
+  hatEnvAmp  = 0.85f;       // closed hat, shorter
   hatToneEnv = 1.0f;
-  for (int i = 0; i < 6; ++i) hatPhases[i] = 0.0f;
-  // choke open-hat tail (606 behavior)
-  openHatEnvAmp *= 0.3f;
+  // choke open-hat tail
+  openHatEnvAmp *= 0.25f;
+  for (int i = 0; i < 6; ++i) hatPh[i] = 0.0f;
 }
 
 void DrumSynthVoice::triggerOpenHat() {
   openHatActive = true;
-  openHatEnvAmp = 1.0f;
+  openHatEnvAmp  = 0.95f;   // open hat, longer
   openHatToneEnv = 1.0f;
-  for (int i = 0; i < 6; ++i) openHatPhases[i] = 0.0f;
+  for (int i = 0; i < 6; ++i) openHatPh[i] = 0.0f;
 }
 
 void DrumSynthVoice::triggerMidTom() {
-  midTomActive = true; midTomEnv = 1.0f; midTomPhase = 0.0f;
+  midTomActive = true;
+  midTomEnv      = 1.0f;
+  midTomPitchEnv = 1.0f; // small sweep for character
+  midTomPhase    = 0.0f;
 }
 
 void DrumSynthVoice::triggerHighTom() {
-  highTomActive = true; highTomEnv = 1.0f; highTomPhase = 0.0f;
+  highTomActive = true;
+  highTomEnv      = 1.0f;
+  highTomPitchEnv = 1.0f;
+  highTomPhase    = 0.0f;
 }
 
 void DrumSynthVoice::triggerRim() {
-  rimActive = true; rimEnv = 1.0f; rimPhase = 0.0f;
+  rimActive = true;
+  rimEnv   = 1.0f;
+  rimPhase = 0.0f;
+  rimBp = 0.0f;
+  rimLp = 0.0f;
 }
 
 void DrumSynthVoice::triggerClap() {
-  clapActive = true; clapEnv = 1.0f; clapTrans = 1.0f; clapNoise = frand(); clapDelay = 0.0f;
+  clapActive = true;
+  clapEnv    = 1.0f;
+  clapTrans  = 1.0f;
+  clapNoiseSeed = frand(); // per-hit color
+  clapTime   = 0.0f;
+  clapIdx    = 0;
 }
 
-float DrumSynthVoice::frand() {
-  return (float)rand() / (float)RAND_MAX * 2.0f - 1.0f;
-}
-
-// --- Kick (TR-808-flavored): decaying sine with short click and subtle pitch drop ---
+// ---------------- Processors ----------------
 float DrumSynthVoice::processKick() {
   if (!kickActive) return 0.0f;
 
-  // amplitude & pitch envelopes
-  kickEnvAmp   *= 0.9996f;        // long tail (808-style)
-  kickEnvPitch *= 0.9925f;        // very quick drop for attack punch
-  if (kickEnvAmp < 0.0003f) { kickActive = false; return 0.0f; }
+  // Envelope: fast amp & pitch decay for tight 606-like thump
+  kickEnvAmp   *= 0.9965f;         // ~150–200 ms
+  kickEnvPitch *= 0.985f;          // fast pitch drop
+  kickClickEnv *= 0.92f;           // very short transient
 
-  // Base frequency near 50–56 Hz; add small transient pitch rise then drop
-  float baseF = 55.0f;
-  float pitchAmt = 20.0f;         // transient amount
-  float f = baseF + pitchAmt * (kickEnvPitch * kickEnvPitch);
+  if (kickEnvAmp < 0.0006f) { kickActive = false; return 0.0f; }
 
-  // integrate phase
-  kickPhase += f * invSampleRate;
+  // pitch factor
+  float p = kickEnvPitch * kickEnvPitch;
+  float f = 48.0f + 120.0f * p;    // start higher, drop quickly
+  kickFreq = f;
+
+  // oscillator
+  kickPhase += kickFreq * invSampleRate;
   if (kickPhase >= 1.0f) kickPhase -= 1.0f;
-  float sine = sinf(2.0f * 3.14159265f * kickPhase);
 
-  // short click (filtered noise burst)
-  float click = clampf((kickEnvPitch > 0.6f) ? frand() * 0.2f : 0.0f, -0.2f, 0.2f);
+  float body = sinf(2.0f * 3.14159265f * kickPhase);
 
-  // tone: sine through gentle drive
-  float tone = tanhf((sine * 2.4f) + click);
-  return tone * kickEnvAmp * 0.95f;
+  // slight drive gives 808/606 style compression feel
+  float driven = fast_tanhf(body * (2.6f + 0.7f * kickEnvAmp));
+
+  // click: short high-frequency burst mixed in at onset
+  float click = (frand() * 0.5f + 0.5f) * kickClickEnv * 0.3f;
+
+  return (driven * 0.9f + click) * kickEnvAmp;
 }
 
-// --- Snare (606-leaning: brighter noise + short tonal tick) ---
 float DrumSynthVoice::processSnare() {
   if (!snareActive) return 0.0f;
 
-  // envelopes
-  snareEnvAmp  *= 0.9985f;   // slow-ish noise decay
-  snareToneEnv *= 0.97f;     // very short tone
+  // Envelopes: long noise tail, short tone tick
+  snareEnvAmp  *= 0.9983f;     // slow decay
+  snareToneEnv *= 0.94f;       // short tick
   if (snareEnvAmp < 0.0002f) { snareActive = false; return 0.0f; }
 
-  // brighter noise
-  float n = frand();
-  float hp = n - snareLp;                // crude HP
-  float bpCoeff = 0.22f;                 // narrower band-pass (~2–3 kHz region)
-  snareBp += bpCoeff * (hp - 0.27f * snareBp);
-  snareLp += bpCoeff * snareBp;
-  float noiseOut = (hp * 0.55f + snareBp * 0.45f);
+  // Noise: bright with slight HP emphasis
+  float n = frand();           // white
+  // crude bandpass around ~1–2 kHz using two one-poles
+  const float f = 0.30f;
+  snareBp += f * (n - snareLp - 0.22f * snareBp);
+  snareLp += f * snareBp;
+  float noiseHP = n - snareLp;
+  float noiseOut = snareBp * 0.38f + noiseHP * 0.62f;
 
-  // tonal tick (two short sines)
-  snareTonePhase  += 260.0f * invSampleRate; if (snareTonePhase  >= 1.0f) snareTonePhase  -= 1.0f;
-  snareTonePhase2 += 420.0f * invSampleRate; if (snareTonePhase2 >= 1.0f) snareTonePhase2 -= 1.0f;
+  // Tones: ~330 Hz and ~180 Hz, short
+  snareTonePhase  += 330.0f * invSampleRate; if (snareTonePhase  >= 1.0f) snareTonePhase  -= 1.0f;
+  snareTonePhase2 += 180.0f * invSampleRate; if (snareTonePhase2 >= 1.0f) snareTonePhase2 -= 1.0f;
   float toneA = sinf(2.0f * 3.14159265f * snareTonePhase);
   float toneB = sinf(2.0f * 3.14159265f * snareTonePhase2);
-  float tone  = (toneA * 0.6f + toneB * 0.4f) * (snareToneEnv * 0.25f);
+  float tone = (toneA * 0.55f + toneB * 0.45f) * snareToneEnv;
 
-  float out = tanhf(noiseOut * 1.6f + tone * 0.75f);
-  return out * snareEnvAmp * 0.9f;
+  float out = noiseOut * 0.78f + tone * 0.55f;
+  return out * snareEnvAmp;
 }
 
-// --- Biquad BP apply helper ---
-static inline float biquad_bp(float x, float b0, float b1, float b2, float a1, float a2,
-                              float& x1, float& x2, float& y1, float& y2) {
-  float y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-  x2 = x1; x1 = x; y2 = y1; y1 = y;
-  return y;
-}
-
-// --- Closed Hat (TR-606-style): six squares -> BP ~7.1 kHz -> VCA -> HPF ---
 float DrumSynthVoice::processHat() {
   if (!hatActive) return 0.0f;
 
-  hatEnvAmp *= 0.9965f;      // fast but audible CH decay
-  hatToneEnv *= 0.98f;
-  if (hatEnvAmp < 0.0006f) { hatActive = false; return 0.0f; }
+  // Closed hat envelopes: short
+  hatEnvAmp  *= 0.996f;  // short tail
+  hatToneEnv *= 0.90f;
+  if (hatEnvAmp < 0.0005f) { hatActive = false; return 0.0f; }
 
-  // six square oscillators
-  float mix = 0.0f;
+  // Metal partials: six squares at non-harmonic freqs
+  float metal = 0.0f;
   for (int i = 0; i < 6; ++i) {
-    hatPhases[i] += hatOscFreqs[i] * invSampleRate;
-    if (hatPhases[i] >= 1.0f) hatPhases[i] -= 1.0f;
-    float sq = (hatPhases[i] < 0.5f) ? 1.0f : -1.0f;
-    mix += sq;
+    hatPh[i] += hatInc[i];
+    if (hatPh[i] >= 1.0f) hatPh[i] -= 1.0f;
+    metal += (hatPh[i] < 0.5f ? 1.0f : -1.0f); // square
   }
-  mix *= (1.0f / 6.0f);
+  metal = (metal / 6.0f) * hatToneEnv;
 
-  // band-pass around ~7.1k (robust biquad, CH coefficients)
-  float bp = biquad_bp(mix, bp_b0_ch, bp_b1_ch, bp_b2_ch, bp_a1_ch, bp_a2_ch,
-                       hatBP_x1, hatBP_x2, hatBP_y1, hatBP_y2);
+  // Add a little noise for sizzle
+  float n = frand() * 0.6f;
 
-  // VCA + gentle saturation
-  float vca = bp * hatEnvAmp;
-  float driven = tanhf(vca * 1.8f);
+  // HP filter (emphasize crispness)
+  const float alpha = 0.93f;
+  hatHp = alpha * (hatHp + n + metal - hatPrev);
+  hatPrev = n + metal;
 
-  // post-VCA high-pass (a ~ 0.98)
-  const float a = 0.98f;
-  float yhp = a * (hatHP_y1 + driven - hatHP_x1);
-  hatHP_y1 = yhp; hatHP_x1 = driven;
-
-  return yhp * 0.9f;
+  // Simple BP tilt
+  float out = hatHp * 0.8f + metal * 0.35f;
+  return out * hatEnvAmp * 0.75f;
 }
 
-// --- Open Hat (brighter): same source; higher BP center; longer decay; choke by CH trigger) ---
 float DrumSynthVoice::processOpenHat() {
   if (!openHatActive) return 0.0f;
 
-  openHatEnvAmp *= 0.9990f;   // longer decay than CH
-  openHatToneEnv *= 0.992f;
-  if (openHatEnvAmp < 0.0005f) { openHatActive = false; return 0.0f; }
+  openHatEnvAmp  *= 0.9988f;  // longer decay than closed
+  openHatToneEnv *= 0.94f;
+  if (openHatEnvAmp < 0.0004f) { openHatActive = false; return 0.0f; }
 
-  float mix = 0.0f;
+  float metal = 0.0f;
   for (int i = 0; i < 6; ++i) {
-    openHatPhases[i] += hatOscFreqs[i] * invSampleRate;
-    if (openHatPhases[i] >= 1.0f) openHatPhases[i] -= 1.0f;
-    float sq = (openHatPhases[i] < 0.5f) ? 1.0f : -1.0f;
-    mix += sq;
+    openHatPh[i] += openHatInc[i];
+    if (openHatPh[i] >= 1.0f) openHatPh[i] -= 1.0f;
+    metal += (openHatPh[i] < 0.5f ? 1.0f : -1.0f);
   }
-  mix *= (1.0f / 6.0f);
+  metal = (metal / 6.0f) * openHatToneEnv;
 
-  // band-pass with OH coefficients (higher center for brighter pitch)
-  float bp = biquad_bp(mix, bp_b0_oh, bp_b1_oh, bp_b2_oh, bp_a1_oh, bp_a2_oh,
-                       openHatBP_x1, openHatBP_x2, openHatBP_y1, openHatBP_y2);
+  float n = frand() * 0.5f;
 
-  float vca = bp * openHatEnvAmp;
-  float driven = tanhf(vca * 1.65f);
+  const float alpha = 0.94f;
+  openHatHp = alpha * (openHatHp + n + metal - openHatPrev);
+  openHatPrev = n + metal;
 
-  const float a = 0.985f; // slightly less HP than CH to keep airy top
-  float yhp = a * (openHatHP_y1 + driven - openHatHP_x1);
-  openHatHP_y1 = yhp; openHatHP_x1 = driven;
-
-  return yhp * 0.95f;
+  float out = openHatHp * 0.65f + metal * 0.55f;
+  return out * openHatEnvAmp * 0.8f;
 }
 
-// --- Toms ---
 float DrumSynthVoice::processMidTom() {
   if (!midTomActive) return 0.0f;
-  midTomEnv *= 0.99925f;
+
+  midTomEnv      *= 0.9991f;     // medium tail
+  midTomPitchEnv *= 0.9975f;     // small pitch drop
   if (midTomEnv < 0.0003f) { midTomActive = false; return 0.0f; }
-  float freq = 180.0f;
-  midTomPhase += freq * invSampleRate;
-  if (midTomPhase >= 1.0f) midTomPhase -= 1.0f;
+
+  float base = 170.0f;           // ~808 mid
+  float freq = base + 15.0f * (midTomPitchEnv * midTomPitchEnv);
+  midTomPhase += freq * invSampleRate; if (midTomPhase >= 1.0f) midTomPhase -= 1.0f;
+
   float tone = sinf(2.0f * 3.14159265f * midTomPhase);
-  float slightNoise = frand() * 0.05f;
-  return (tone * 0.9f + slightNoise) * midTomEnv * 0.8f;
+  // slight noise + subtle drive
+  float slightNoise = frand() * 0.03f;
+  float driven = fast_tanhf(tone * 2.0f);
+
+  return (driven * 0.9f + slightNoise) * midTomEnv * 0.85f;
 }
 
 float DrumSynthVoice::processHighTom() {
   if (!highTomActive) return 0.0f;
-  highTomEnv *= 0.99915f;
+
+  highTomEnv      *= 0.9990f;
+  highTomPitchEnv *= 0.997f;
   if (highTomEnv < 0.0003f) { highTomActive = false; return 0.0f; }
-  float freq = 240.0f;
-  highTomPhase += freq * invSampleRate;
-  if (highTomPhase >= 1.0f) highTomPhase -= 1.0f;
+
+  float base = 230.0f;           // ~808 high
+  float freq = base + 18.0f * (highTomPitchEnv * highTomPitchEnv);
+  highTomPhase += freq * invSampleRate; if (highTomPhase >= 1.0f) highTomPhase -= 1.0f;
+
   float tone = sinf(2.0f * 3.14159265f * highTomPhase);
-  float slightNoise = frand() * 0.04f;
-  return (tone * 0.88f + slightNoise) * highTomEnv * 0.75f;
+  float slightNoise = frand() * 0.028f;
+  float driven = fast_tanhf(tone * 2.0f);
+
+  return (driven * 0.88f + slightNoise) * highTomEnv * 0.8f;
 }
 
-// --- Rim ---
 float DrumSynthVoice::processRim() {
   if (!rimActive) return 0.0f;
-  rimEnv *= 0.9985f;
-  if (rimEnv < 0.0004f) { rimActive = false; return 0.0f; }
-  rimPhase += 900.0f * invSampleRate;
-  if (rimPhase >= 1.0f) rimPhase -= 1.0f;
-  float tone = sinf(2.0f * 3.14159265f * rimPhase);
-  float click = (frand() * 0.6f + 0.4f) * rimEnv;
-  return (tone * 0.5f + click) * rimEnv * 0.8f;
+
+  rimEnv *= 0.9978f; // very short
+  if (rimEnv < 0.0006f) { rimActive = false; return 0.0f; }
+
+  // Short tick + bandpass ~1.4 kHz for woody rim shot
+  rimPhase += 1400.0f * invSampleRate; if (rimPhase >= 1.0f) rimPhase -= 1.0f;
+  float tick = sinf(2.0f * 3.14159265f * rimPhase) * 0.6f;
+
+  float n = frand();
+  const float f = 0.35f;
+  rimBp += f * (n - rimLp - 0.30f * rimBp);
+  rimLp += f * rimBp;
+  float bp = rimBp;
+
+  return (tick * 0.6f + bp * 0.7f) * rimEnv * 0.9f;
 }
 
-// --- Clap ---
 float DrumSynthVoice::processClap() {
   if (!clapActive) return 0.0f;
-  clapEnv  *= 0.99992f;
-  clapTrans *= 0.9985f;
-  clapDelay += invSampleRate;
-  if (clapEnv < 0.0002f) { clapActive = false; return 0.0f; }
 
-  float burst = 0.0f;
-  if (clapDelay < 0.024f) burst = 1.0f;
-  else if (clapDelay < 0.048f) burst = 0.8f;
-  else if (clapDelay < 0.072f) burst = 0.6f;
-  float noise = frand() * 0.7f + clapNoise * 0.3f;
-  float tone = sinf(2.0f * 3.14159265f * 1100.0f * clapDelay);
-  float out = (noise * 0.7f + tone * 0.3f) * clapTrans * burst;
-  return out * clapEnv;
+  clapEnv   *= 0.99985f;         // long-ish noise body
+  clapTrans *= 0.995f;           // transient decays quicker
+  clapTime  += invSampleRate;
+  if (clapEnv < 0.00025f) { clapActive = false; return 0.0f; }
+
+  // 808 clap: series of short bursts (3–4) followed by a short reverb tail.
+  // Burst gates at ~12 ms intervals, decreasing strength.
+  float burstGate = 0.0f;
+  if (clapTime < 0.012f)       burstGate = 1.0f;
+  else if (clapTime < 0.024f)  burstGate = 0.85f;
+  else if (clapTime < 0.036f)  burstGate = 0.7f;
+  else if (clapTime < 0.048f)  burstGate = 0.55f;
+
+  // Noise color per hit
+  float noise = (frand() * 0.7f + clapNoiseSeed * 0.3f) * burstGate;
+
+  // Resonant bandpass around 1 kHz to 1.6 kHz (simple two one-poles)
+  static float bp = 0.0f, lp = 0.0f;
+  const float f = 0.32f;
+  bp += f * (noise - lp - 0.25f * bp);
+  lp += f * bp;
+  float colored = bp * 0.7f + (noise - lp) * 0.3f;
+
+  // Short comb “reverb” (~8 ms). Use a simple feedback comb.
+  // y[n] = x[n] + 0.5 * y[n - D]
+  int readIdx = clapIdx - clapCombLen;
+  if (readIdx < 0) readIdx += kClapBufMax;
+  float tail = clapBuf[readIdx] * 0.5f;
+  float y = colored * clapTrans + tail;
+  clapBuf[clapIdx] = y;
+  clapIdx++; if (clapIdx >= kClapBufMax) clapIdx = 0;
+
+  return y * clapEnv;
 }
 
+// ---------------- Params ----------------
 const Parameter& DrumSynthVoice::parameter(DrumParamId id) const {
   return params[static_cast<int>(id)];
 }

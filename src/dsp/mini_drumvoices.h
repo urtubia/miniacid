@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "mini_dsp_params.h"
 
+// Public parameter ids (kept for compatibility)
 enum class DrumParamId : uint8_t {
   MainVolume = 0,
   Count
@@ -23,7 +24,7 @@ public:
   void triggerRim();
   void triggerClap();
 
-  // Processors (one sample per call)
+  // Audio processors (one sample per call)
   float processKick();
   float processSnare();
   float processHat();
@@ -33,74 +34,89 @@ public:
   float processRim();
   float processClap();
 
+  // Parameters (kept)
   const Parameter& parameter(DrumParamId id) const;
   void setParameter(DrumParamId id, float value);
 
 private:
+  // Fast RNG [-1, 1]
   float frand();
+  uint32_t rngState;
 
-  // --- Kick (808-style) ---
+  // ----- Kick (606-tight) -----
   float kickPhase;
+  float kickFreq;
   float kickEnvAmp;
   float kickEnvPitch;
+  float kickClickEnv;
   bool  kickActive;
 
-  // --- Snare ---
-  float snareEnvAmp;
-  float snareToneEnv;
+  // ----- Snare -----
+  float snareEnvAmp;     // noise amp
+  float snareToneEnv;    // tone tick
   bool  snareActive;
+  // simple state for noise filters
   float snareBp;
   float snareLp;
+  // two tone oscillators
   float snareTonePhase;
   float snareTonePhase2;
 
-  // --- Hats (606-style source + robust biquad BPF) ---
+  // ----- Closed Hat (metallic) -----
   float hatEnvAmp;
   float hatToneEnv;
   bool  hatActive;
-  float hatPhases[6];     // six square oscillators
-  float hatOscFreqs[6];   // base oscillators' frequencies
-  // Biquad band-pass states (~7.1 kHz for CH)
-  float hatBP_x1, hatBP_x2, hatBP_y1, hatBP_y2;
-  // Biquad band-pass states for OH (slightly higher center)
-  float openHatBP_x1, openHatBP_x2, openHatBP_y1, openHatBP_y2;
-  // Biquad coefficients for CH
-  float bp_b0_ch, bp_b1_ch, bp_b2_ch, bp_a1_ch, bp_a2_ch;
-  // Biquad coefficients for OH (brighter)
-  float bp_b0_oh, bp_b1_oh, bp_b2_oh, bp_a1_oh, bp_a2_oh;
-  // Post-VCA highpass
-  float hatHP_y1, hatHP_x1;
-  float openHatHP_y1, openHatHP_x1;
+  float hatHp;           // HP filter state
+  float hatPrev;
+  // six square oscillators
+  float hatPh[6];
 
+  // ----- Open Hat -----
   float openHatEnvAmp;
   float openHatToneEnv;
   bool  openHatActive;
-  float openHatPhases[6];
+  float openHatHp;
+  float openHatPrev;
+  float openHatPh[6];
 
-  // --- Toms ---
+  // ----- Toms -----
   float midTomPhase;
   float midTomEnv;
+  float midTomPitchEnv;
   bool  midTomActive;
+
   float highTomPhase;
   float highTomEnv;
+  float highTomPitchEnv;
   bool  highTomActive;
 
-  // --- Rim ---
+  // ----- Rimshot -----
   float rimPhase;
   float rimEnv;
+  float rimBp;           // bandpass state
+  float rimLp;
   bool  rimActive;
 
-  // --- Clap ---
+  // ----- Clap -----
   float clapEnv;
-  float clapTrans;
-  float clapNoise;
+  float clapTrans;       // transient env
+  float clapNoiseSeed;   // seed per hit
   bool  clapActive;
-  float clapDelay;
+  float clapTime;        // seconds since trigger
+  // mini comb/reverb
+  static const int kClapBufMax = 1024;
+  float clapBuf[kClapBufMax];
+  int   clapIdx;
+  int   clapCombLen;
 
-  // --- System ---
+  // Sample rate
   float sampleRate;
   float invSampleRate;
 
-  // Parameters
+  // Hat oscillator freqs (phase increments computed per sampleRate)
+  float hatInc[6];
+  float openHatInc[6];
+
+  // Global params
   Parameter params[static_cast<int>(DrumParamId::Count)];
 };
