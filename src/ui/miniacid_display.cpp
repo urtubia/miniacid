@@ -140,7 +140,7 @@ void MiniAcidDisplay::drawSplashScreen() {
   if (start_y < 6) start_y = 6;
 
   gfx_.setFont(GfxFont::kFreeMono24pt);
-  centerText(start_y, "MiniAcid", COLOR_ACCENT);
+  centerText(start_y, "ajrAcid", COLOR_ACCENT);
 
   gfx_.setFont(GfxFont::kFont5x7);
   int info_y = start_y + title_h + gap;

@@ -1,3 +1,21 @@
+# fork: ajrAcid
+
+This is a personal fork of MiniAcid, a tiny acid groovebox for the M5Stack Cardputer. I've forked it to make some changes and make this awesome little app more to my liking. A huge THANK YOU to [urtubia](https://github.com/urtubia/) for developing this and sharing it with the world! The UI is excellent, it's well thought out.
+
+DONE:
+- Simple bus compressor for the drums to increase punch
+- Updated all drum voices - BD, SN, CH, OH, RS, and CP all have been changed. Current clap is a burst of static, but I'm working on that.
+- Changed banner to "ajrAcid" in blue so I can tell whether I'm running my fork or the original
+- Lowered the resonance floor - there was always some squelch with MiniAcid 0.0.5. Especially with two voices, it's important to me to have a squelchless 303.
+
+TODO - Short Term:
+- Better clap - currently it's a burst of noise, working on that. Aiming for something like the 808 clap.
+- Improving the hi-hats - I wanted a crispier and more metalic hi-hats, 606/808ish
+
+TODO - Medium term:
+- Drum parameter screen: Modify drum BusCompAmount, drum voice decay time(s)
+- Mixer screen: to change levels of each synth and drum voice
+
 # MiniAcid
 
 MiniAcid is a tiny acid groovebox for the M5Stack Cardputer. It runs two squelchy TB-303 style voices plus a punchy TR-808 inspired drum section on the Cardputer's built-in keyboard and screen, so you can noodle basslines and beats anywhere.
