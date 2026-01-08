@@ -775,7 +775,7 @@ void MiniAcid::generateAudioBuffer(int16_t *buffer, size_t numSamples) {
     float sampleOut = 0.0f;
 
     if (playing) {
-      // ---- 303 voices (with tempo delay) ----
+      // 303 voices (with tempo delay)
       float sample303 = 0.0f;
       if (!mute303) {
         float v = voice303.process() * 0.5f;
@@ -791,7 +791,6 @@ void MiniAcid::generateAudioBuffer(int16_t *buffer, size_t numSamples) {
         delay3032.process(0.0f);
       }
 
-      // ---- DRUM BUS (sum all drums, then bus-comp) ----
       float drumSum = 0.0f;
       if (!muteKick)    drumSum += drums.processKick();
       if (!muteSnare)   drumSum += drums.processSnare();
@@ -802,18 +801,17 @@ void MiniAcid::generateAudioBuffer(int16_t *buffer, size_t numSamples) {
       if (!muteRim)     drumSum += drums.processRim();
       if (!muteClap)    drumSum += drums.processClap();
 
-      // Bus compressor applies to the whole DRUM MIX
-      // if you want to compress the entire mix (drums+303), move the processBus() call after sampleOut = drumSum + sample303.
+      // Bus compressor can be applied to the whole mix, or just the drums
+      // uncoment the line below to process the drums w/ the bus comp
       // drumSum = drums.processBus(drumSum);
 
-      // ---- Mix drums + 303 ----
       sampleOut = drumSum + sample303;
       
       // uncomment to use bus comp on the whole mix
       sampleOut = drums.processBus(sampleOut);
     }
 
-    // Soft clipping/limiting
+    // soft clipping/limiting
     sampleOut *= 0.65f;
     if (sampleOut > 1.0f)  sampleOut = 1.0f;
     if (sampleOut < -1.0f) sampleOut = -1.0f;

@@ -3,10 +3,9 @@
 #include <stdint.h>
 #include "mini_dsp_params.h"
 
-// Public parameter ids (kept for compatibility + bus comp)
 enum class DrumParamId : uint8_t {
   MainVolume = 0,
-  BusCompAmount,   // 0..1 one-knob compressor
+  BusCompAmount,   // 0..1
   Count
 };
 
@@ -36,13 +35,13 @@ public:
   float processRim();
   float processClap();     // updated
 
-  // Bus processing (apply one-knob compressor to any mix sample)
+  // Bus processing
   float processBus(float mixSample);
 
   // Snare
   float snareHpPrev; // extra high-pass memory
 
-  // Parameters
+  // Parameters - for later
   const Parameter& parameter(DrumParamId id) const;
   void setParameter(DrumParamId id, float value);
 
@@ -51,39 +50,39 @@ private:
   float frand();
   uint32_t rngState;
 
-  // ----- Kick (606-tight) -----
+  // Kick (606-tight)
   float kickPhase, kickFreq, kickEnvAmp, kickEnvPitch, kickClickEnv;
   bool  kickActive;
 
-  // ----- Snare -----
+  // Snare
   float snareEnvAmp, snareToneEnv;
   bool  snareActive;
   float snareBp, snareLp, snareTonePhase, snareTonePhase2;
 
-  // ----- Closed Hat (metallic) -----
+  // Closed Hat (metallic)
   float hatEnvAmp, hatToneEnv;
   bool  hatActive;
   float hatHp, hatPrev;
   float hatPh[6], hatInc[6];
 
-  // ----- Open Hat -----
+  // Open Hat
   float openHatEnvAmp, openHatToneEnv;
   bool  openHatActive;
   float openHatHp, openHatPrev;
   float openHatPh[6], openHatInc[6];
 
-  // ----- Toms -----
+  // Toms
   float midTomPhase, midTomEnv, midTomPitchEnv;
   bool  midTomActive;
 
   float highTomPhase, highTomEnv, highTomPitchEnv;
   bool  highTomActive;
 
-  // ----- Rimshot -----
+  // Rimshot
   float rimPhase, rimEnv, rimBp, rimLp;
   bool  rimActive;
 
-  // ----- Clap (hollow, multi-hand) -----
+  // Clap (hollow, multi-hand)
   float clapEnv;         // overall body envelope (slow)
   float clapTrans;       // transient envelope (fast)
   float clapTailEnv;     // tail/body envelope (medium)
@@ -104,7 +103,7 @@ private:
   float clapSnapEnv1,   clapSnapEnv2,   clapSnapEnv3;
   float clapCrackEnv;
 
-  // Feed-forward multi-tap cluster (no feedback)
+  // feed-forward multi-tap cluster (no feedback)
   static const int kClapTapBufMax = 2048;  // big enough for ~30 ms @ 44.1 kHz
   float clapTapBuf[kClapTapBufMax];
   int   clapTapIdx;
@@ -114,10 +113,12 @@ private:
   // Sample rate
   float sampleRate, invSampleRate;
 
-  // ----- One-knob Bus Compressor -----
+  // Bus Compressor
   float compEnv, compAttackCoeff, compReleaseCoeff;
   float compGainDb, compMakeupDb, compThreshDb, compRatio, compKneeDb, compAmount;
-
-  // Global params
+  int   compDecimCounter;   // sub-rate update counter
+  float compLastGainAmp;    // last applied amplitude gain
+  
+  // Global params - for later
   Parameter params[static_cast<int>(DrumParamId::Count)];
 };
