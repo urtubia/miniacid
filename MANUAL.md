@@ -575,7 +575,7 @@ MiniAcid can record your sessions to WAV audio files. Recording captures the mas
 | **CTRL/CMD+X** | Cut pattern |
 | **CTRL/CMD+Z** | Undo last edit |
 | **CTRL/CMD+S** | Save scene |
-| **CTRL/CMD+R** | Start/Stop recording |
+| **CTRL/CMD+J** | Start/Stop recording |
 
 ---
 

@@ -307,7 +307,7 @@ bool MiniAcidDisplay::translateToApplicationEvent(UIEvent& event) {
       event.event_type = MINIACID_APPLICATION_EVENT;
       event.app_event_type = MINIACID_APP_EVENT_SAVE_SCENE;
       return true;
-    } else if (event.key == 'r' && (event.ctrl || event.meta)) {
+    } else if (event.key == 'j' && (event.ctrl || event.meta)) {
       event.event_type = MINIACID_APPLICATION_EVENT;
       if (audio_recorder_ && audio_recorder_->isRecording()) {
         event.app_event_type = MINIACID_APP_EVENT_STOP_RECORDING;
