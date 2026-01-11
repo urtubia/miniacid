@@ -169,6 +169,7 @@ public:
   bool hasSong() const;
   bool songMode() const;
   int songPosition() const;
+  const std::string& drumEngineName() const;
 
 private:
   enum class Path {
@@ -238,6 +239,7 @@ private:
   bool hasSong_ = false;
   bool songMode_ = false;
   int songPosition_ = 0;
+  std::string drumEngineName_ = "808";
 };
 
 class SceneManager {
@@ -280,6 +282,8 @@ public:
   bool getSynthDelayEnabled(int synthIdx) const;
   void setSynthParameters(int synthIdx, const SynthParameters& params);
   const SynthParameters& getSynthParameters(int synthIdx) const;
+  void setDrumEngineName(const std::string& name);
+  const std::string& getDrumEngineName() const;
   void setBpm(float bpm);
   float getBpm() const;
 
@@ -330,6 +334,7 @@ private:
   float bpm_ = 100.0f;
   bool songMode_ = false;
   int songPosition_ = 0;
+  std::string drumEngineName_ = "808";
 };
 
 // inline constexpr size_t SceneManager::sceneJsonCapacity() {
@@ -385,6 +390,16 @@ bool SceneManager::writeSceneJson(TWriter&& writer) const {
       if (!writeBool(values[i])) return false;
     }
     return true;
+  };
+  auto writeString = [&](const std::string& value) -> bool {
+    if (!writeChar('"')) return false;
+    for (char ch : value) {
+      if (ch == '"' || ch == '\\') {
+        if (!writeChar('\\')) return false;
+      }
+      if (!writeChar(ch)) return false;
+    }
+    return writeChar('"');
   };
   auto writeDrumPattern = [&](const DrumPattern& pattern) -> bool {
     if (!writeLiteral("{\"hit\":[")) return false;
@@ -497,6 +512,8 @@ bool SceneManager::writeSceneJson(TWriter&& writer) const {
   if (!writeChar(']')) return false;
   if (!writeLiteral(",\"drumBankIndex\":")) return false;
   if (!writeInt(drumBankIndex_)) return false;
+  if (!writeLiteral(",\"drumEngine\":")) return false;
+  if (!writeString(drumEngineName_)) return false;
   if (!writeLiteral(",\"synthBankIndex\":[")) return false;
   if (!writeInt(synthBankIndex_[0])) return false;
   if (!writeChar(',')) return false;

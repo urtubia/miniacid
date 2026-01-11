@@ -283,6 +283,15 @@ void MiniAcidDisplay::initPageHint(int x, int y, int w) {
 
 bool MiniAcidDisplay::translateToApplicationEvent(UIEvent& event) {
   if (event.event_type == MINIACID_KEY_DOWN) {
+    if (event.shift && event.scancode == MINIACID_DOWN) {
+      event.event_type = MINIACID_APPLICATION_EVENT;
+      event.app_event_type = MINIACID_APP_EVENT_MULTIPAGE_DOWN;
+      return true;
+    } else if (event.shift && event.scancode == MINIACID_UP) {
+      event.event_type = MINIACID_APPLICATION_EVENT;
+      event.app_event_type = MINIACID_APP_EVENT_MULTIPAGE_UP;
+      return true;
+    }
     if (event.key == 'c' && (event.ctrl || event.meta)) {
       event.event_type = MINIACID_APPLICATION_EVENT;
       event.app_event_type = MINIACID_APP_EVENT_COPY;

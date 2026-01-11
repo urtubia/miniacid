@@ -122,6 +122,8 @@ public:
   const Song& song() const;
   int display303PatternIndex(int voiceIndex) const;
   int displayDrumPatternIndex() const;
+  std::vector<std::string> getAvailableDrumEngines() const;
+  void setDrumEngine(const std::string& engineName);
   std::string currentSceneName() const;
   std::vector<std::string> availableSceneNames() const;
   bool loadSceneByName(const std::string& name);
@@ -190,6 +192,7 @@ private:
   TB303Voice voice3032;
   std::unique_ptr<DrumSynthVoice> drums;
   float sampleRateValue;
+  std::string drumEngineName_;
 
   SceneManager sceneManager_;
   SceneStorage* sceneStorage_;

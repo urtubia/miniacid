@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <cctype>
 #include <string>
 
 namespace {
@@ -38,6 +39,13 @@ DrumPatternSet makeEmptyDrumPatternSet() {
 
 const SynthPattern kEmptySynthPattern = makeEmptySynthPattern();
 const DrumPatternSet kEmptyDrumPatternSet = makeEmptyDrumPatternSet();
+
+std::string toLowerCopy(std::string value) {
+  for (char& ch : value) {
+    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  return value;
+}
 }
 
 TempoDelay::TempoDelay(float sampleRate)
@@ -142,6 +150,7 @@ MiniAcid::MiniAcid(float sampleRate, SceneStorage* sceneStorage)
     drums(std::make_unique<TR808DrumSynthVoice>(sampleRate)),
     // drums(std::make_unique<TR909DrumSynthVoice>(sampleRate)),
     sampleRateValue(sampleRate),
+    drumEngineName_("808"),
     sceneStorage_(sceneStorage),
     playing(false),
     mute303(false),
@@ -501,6 +510,27 @@ int MiniAcid::displayDrumPatternIndex() const {
     return songPatternIndexInBank(combined);
   }
   return sceneManager_.getCurrentDrumPatternIndex();
+}
+
+std::vector<std::string> MiniAcid::getAvailableDrumEngines() const {
+  return {"808", "909", "606"};
+}
+
+void MiniAcid::setDrumEngine(const std::string& engineName) {
+  std::string name = toLowerCopy(engineName);
+  if (name.find("909") != std::string::npos) {
+    drums = std::make_unique<TR909DrumSynthVoice>(sampleRateValue);
+    drumEngineName_ = "909";
+  } else if (name.find("606") != std::string::npos) {
+    drums = std::make_unique<TR606DrumSynthVoice>(sampleRateValue);
+    drumEngineName_ = "606";
+  } else if (name.find("808") != std::string::npos) {
+    drums = std::make_unique<TR808DrumSynthVoice>(sampleRateValue);
+    drumEngineName_ = "808";
+  } else {
+    return;
+  }
+  drums->reset();
 }
 
 size_t MiniAcid::copyLastAudio(int16_t *dst, size_t maxSamples) const {
@@ -1097,6 +1127,10 @@ void MiniAcid::saveSceneToStorage() {
 
 void MiniAcid::applySceneStateFromManager() {
   setBpm(sceneManager_.getBpm());
+  const std::string& drumEngineName = sceneManager_.getDrumEngineName();
+  if (!drumEngineName.empty()) {
+    setDrumEngine(drumEngineName);
+  }
   mute303 = sceneManager_.getSynthMute(0);
   mute303_2 = sceneManager_.getSynthMute(1);
 
@@ -1144,6 +1178,7 @@ void MiniAcid::applySceneStateFromManager() {
 
 void MiniAcid::syncSceneStateToManager() {
   sceneManager_.setBpm(bpmValue);
+  sceneManager_.setDrumEngineName(drumEngineName_);
   sceneManager_.setSynthMute(0, mute303);
   sceneManager_.setSynthMute(1, mute303_2);
 

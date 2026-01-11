@@ -40,6 +40,9 @@ enum ApplicationEventType {
   
   MINIACID_APP_EVENT_START_RECORDING,
   MINIACID_APP_EVENT_STOP_RECORDING,
+
+  MINIACID_APP_EVENT_MULTIPAGE_DOWN,
+  MINIACID_APP_EVENT_MULTIPAGE_UP,
 };
 
 enum MouseButtonType {
@@ -313,6 +316,78 @@ class IPage : public Container {
   // Frame methods
   virtual void draw(IGfx& gfx) = 0;
 
+};
+
+class MultiPage : public IPage {
+ public:
+  void addPage(std::shared_ptr<Container> page) {
+    pages_.push_back(page);
+    if (active_index_ < 0) {
+      active_index_ = 0;
+    }
+  }
+
+  int pageCount() const { return static_cast<int>(pages_.size()); }
+  int activePageIndex() const { return active_index_; }
+
+  bool handleEvent(UIEvent& ui_event) override {
+    if (ui_event.event_type == MINIACID_APPLICATION_EVENT) {
+      switch (ui_event.app_event_type) {
+        case MINIACID_APP_EVENT_MULTIPAGE_DOWN:
+          return stepActivePage(1);
+        case MINIACID_APP_EVENT_MULTIPAGE_UP:
+          return stepActivePage(-1);
+        default:
+          break;
+      }
+    }
+    Container* active = activePage();
+    if (!active) return false;
+    active->setBoundaries(getBoundaries());
+    return active->handleEvent(ui_event);
+  }
+
+  void draw(IGfx& gfx) override {
+    Container* active = activePage();
+    if (!active) return;
+    active->setBoundaries(getBoundaries());
+    active->draw(gfx);
+  }
+
+ protected:
+  bool setActivePageIndex(int index) {
+    int count = static_cast<int>(pages_.size());
+    if (count <= 0) return false;
+    if (index < 0) index = 0;
+    if (index >= count) index = count - 1;
+    if (index == active_index_) return true;
+    active_index_ = index;
+    return true;
+  }
+
+  bool stepActivePage(int delta) {
+    int count = static_cast<int>(pages_.size());
+    if (count <= 0) return false;
+    if (count == 1) return true;
+    int next = active_index_;
+    if (next < 0) next = 0;
+    next = (next + delta) % count;
+    if (next < 0) next += count;
+    active_index_ = next;
+    return true;
+  }
+
+  Container* activePage() const {
+    if (active_index_ < 0 ||
+        active_index_ >= static_cast<int>(pages_.size())) {
+      return nullptr;
+    }
+    return pages_[active_index_].get();
+  }
+
+ private:
+  std::vector<std::shared_ptr<Container>> pages_;
+  int active_index_ = -1;
 };
 
 using AudioGuard = std::function<void(const std::function<void()>&)>;

@@ -21,7 +21,7 @@ ifeq ($(strip $(SDL_GFX_CFLAGS)),)
 endif
 
 TARGET := miniacid
-SOURCES := ../src/dsp/mini_tb303.cpp ../src/dsp/mini_drumvoices.cpp ../src/dsp/tube_distortion.cpp ../src/dsp/miniacid_engine.cpp ../src/ui/miniacid_display.cpp ../src/ui/pages/help_page.cpp ../src/ui/pages/help_dialog.cpp ../src/ui/pages/tb303_params_page.cpp ../src/ui/pages/waveform_page.cpp ../src/ui/pages/pattern_edit_page.cpp ../src/ui/pages/drum_sequencer_page.cpp ../src/ui/pages/song_page.cpp ../src/ui/pages/project_page.cpp ../src/ui/components/pattern_selection_bar.cpp ../src/ui/components/bank_selection_bar.cpp ../src/audio/desktop_audio_recorder.cpp ../src/audio/wasm_audio_recorder.cpp ../cardputer_display.cpp ../scenes.cpp ../json_evented.cpp sdl_main.cpp sdl_display.cpp scene_storage_sdl.cpp ../src/ui/ui_core.cpp
+SOURCES := ../src/dsp/mini_tb303.cpp ../src/dsp/mini_drumvoices.cpp ../src/dsp/tube_distortion.cpp ../src/dsp/miniacid_engine.cpp ../src/ui/miniacid_display.cpp ../src/ui/pages/help_page.cpp ../src/ui/pages/help_dialog.cpp ../src/ui/pages/tb303_params_page.cpp ../src/ui/pages/waveform_page.cpp ../src/ui/pages/pattern_edit_page.cpp ../src/ui/pages/drum_sequencer_page.cpp ../src/ui/pages/song_page.cpp ../src/ui/pages/project_page.cpp ../src/ui/components/pattern_selection_bar.cpp ../src/ui/components/bank_selection_bar.cpp ../src/ui/components/label_option.cpp ../src/audio/desktop_audio_recorder.cpp ../src/audio/wasm_audio_recorder.cpp ../cardputer_display.cpp ../scenes.cpp ../json_evented.cpp sdl_main.cpp sdl_display.cpp scene_storage_sdl.cpp ../src/ui/ui_core.cpp
 
 ROOT := $(abspath ..)
 DOCKER ?= docker

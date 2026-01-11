@@ -5,6 +5,7 @@
 
 #include "../help_dialog_frames.h"
 #include "../components/bank_selection_bar.h"
+#include "../components/label_option.h"
 #include "../components/pattern_selection_bar.h"
 
 namespace {
@@ -185,11 +186,60 @@ class DrumSequencerGridComponent : public Component {
   MiniAcid& mini_acid_;
   Callbacks callbacks_;
 };
-} // namespace
 
-DrumSequencerPage::DrumSequencerPage(IGfx& gfx, MiniAcid& mini_acid, AudioGuard& audio_guard)
-  : gfx_(gfx),
-    mini_acid_(mini_acid),
+class DrumSequencerMainPage : public Container {
+ public:
+  DrumSequencerMainPage(MiniAcid& mini_acid, AudioGuard& audio_guard);
+  void draw(IGfx& gfx) override;
+  bool handleEvent(UIEvent& ui_event) override;
+
+ private:
+  int activeDrumPatternCursor() const;
+  int activeDrumStep() const;
+  int activeDrumVoice() const;
+  int activeBankCursor() const;
+  void setDrumPatternCursor(int cursorIndex);
+  void moveDrumCursor(int delta);
+  void moveDrumCursorVertical(int delta);
+  void focusPatternRow();
+  void focusGrid();
+  bool patternRowFocused() const;
+  int patternIndexFromKey(char key) const;
+  int bankIndexFromKey(char key) const;
+  void setBankIndex(int bankIndex);
+  bool bankRowFocused() const;
+  void withAudioGuard(const std::function<void()>& fn);
+
+  MiniAcid& mini_acid_;
+  AudioGuard& audio_guard_;
+  int drum_step_cursor_;
+  int drum_voice_cursor_;
+  int drum_pattern_cursor_;
+  int bank_index_;
+  int bank_cursor_;
+  bool bank_focus_;
+  bool drum_pattern_focus_;
+  std::shared_ptr<Component> grid_component_;
+  std::shared_ptr<PatternSelectionBarComponent> pattern_bar_;
+  std::shared_ptr<BankSelectionBarComponent> bank_bar_;
+};
+
+class GlobalDrumSettingsPage : public Container {
+ public:
+  explicit GlobalDrumSettingsPage(MiniAcid& mini_acid);
+  bool handleEvent(UIEvent& ui_event) override;
+  void draw(IGfx& gfx) override;
+
+ private:
+  void applyDrumEngineSelection();
+
+  MiniAcid& mini_acid_;
+  std::vector<std::string> drum_engine_options_;
+  std::shared_ptr<LabelOptionComponent> character_control_;
+};
+
+DrumSequencerMainPage::DrumSequencerMainPage(MiniAcid& mini_acid, AudioGuard& audio_guard)
+  : mini_acid_(mini_acid),
     audio_guard_(audio_guard),
     drum_step_cursor_(0),
     drum_voice_cursor_(0),
@@ -243,7 +293,7 @@ DrumSequencerPage::DrumSequencerPage(IGfx& gfx, MiniAcid& mini_acid, AudioGuard&
   addChild(grid_component_);
 }
 
-int DrumSequencerPage::activeDrumPatternCursor() const {
+int DrumSequencerMainPage::activeDrumPatternCursor() const {
   int idx = drum_pattern_cursor_;
   if (idx < 0) idx = 0;
   if (idx >= Bank<DrumPatternSet>::kPatterns)
@@ -251,28 +301,28 @@ int DrumSequencerPage::activeDrumPatternCursor() const {
   return idx;
 }
 
-int DrumSequencerPage::activeDrumStep() const {
+int DrumSequencerMainPage::activeDrumStep() const {
   int idx = drum_step_cursor_;
   if (idx < 0) idx = 0;
   if (idx >= SEQ_STEPS) idx = SEQ_STEPS - 1;
   return idx;
 }
 
-int DrumSequencerPage::activeDrumVoice() const {
+int DrumSequencerMainPage::activeDrumVoice() const {
   int idx = drum_voice_cursor_;
   if (idx < 0) idx = 0;
   if (idx >= NUM_DRUM_VOICES) idx = NUM_DRUM_VOICES - 1;
   return idx;
 }
 
-int DrumSequencerPage::activeBankCursor() const {
+int DrumSequencerMainPage::activeBankCursor() const {
   int cursor = bank_cursor_;
   if (cursor < 0) cursor = 0;
   if (cursor >= kBankCount) cursor = kBankCount - 1;
   return cursor;
 }
 
-void DrumSequencerPage::setDrumPatternCursor(int cursorIndex) {
+void DrumSequencerMainPage::setDrumPatternCursor(int cursorIndex) {
   int cursor = cursorIndex;
   if (cursor < 0) cursor = 0;
   if (cursor >= Bank<DrumPatternSet>::kPatterns)
@@ -280,7 +330,7 @@ void DrumSequencerPage::setDrumPatternCursor(int cursorIndex) {
   drum_pattern_cursor_ = cursor;
 }
 
-void DrumSequencerPage::moveDrumCursor(int delta) {
+void DrumSequencerMainPage::moveDrumCursor(int delta) {
   if (mini_acid_.songModeEnabled()) {
     drum_pattern_focus_ = false;
     bank_focus_ = false;
@@ -305,7 +355,7 @@ void DrumSequencerPage::moveDrumCursor(int delta) {
   drum_step_cursor_ = step;
 }
 
-void DrumSequencerPage::moveDrumCursorVertical(int delta) {
+void DrumSequencerMainPage::moveDrumCursorVertical(int delta) {
   if (delta == 0) return;
   if (mini_acid_.songModeEnabled()) {
     drum_pattern_focus_ = false;
@@ -340,30 +390,30 @@ void DrumSequencerPage::moveDrumCursorVertical(int delta) {
   drum_voice_cursor_ = newVoice;
 }
 
-void DrumSequencerPage::focusPatternRow() {
+void DrumSequencerMainPage::focusPatternRow() {
   setDrumPatternCursor(drum_pattern_cursor_);
   drum_pattern_focus_ = true;
   bank_focus_ = false;
 }
 
-void DrumSequencerPage::focusGrid() {
+void DrumSequencerMainPage::focusGrid() {
   drum_pattern_focus_ = false;
   bank_focus_ = false;
   drum_step_cursor_ = activeDrumStep();
   drum_voice_cursor_ = activeDrumVoice();
 }
 
-bool DrumSequencerPage::patternRowFocused() const {
+bool DrumSequencerMainPage::patternRowFocused() const {
   if (mini_acid_.songModeEnabled()) return false;
   return drum_pattern_focus_;
 }
 
-bool DrumSequencerPage::bankRowFocused() const {
+bool DrumSequencerMainPage::bankRowFocused() const {
   if (mini_acid_.songModeEnabled()) return false;
   return bank_focus_;
 }
 
-int DrumSequencerPage::patternIndexFromKey(char key) const {
+int DrumSequencerMainPage::patternIndexFromKey(char key) const {
   switch (std::tolower(static_cast<unsigned char>(key))) {
     case 'q': return 0;
     case 'w': return 1;
@@ -377,7 +427,7 @@ int DrumSequencerPage::patternIndexFromKey(char key) const {
   }
 }
 
-int DrumSequencerPage::bankIndexFromKey(char key) const {
+int DrumSequencerMainPage::bankIndexFromKey(char key) const {
   switch (key) {
     case '1': return 0;
     case '2': return 1;
@@ -387,7 +437,7 @@ int DrumSequencerPage::bankIndexFromKey(char key) const {
   }
 }
 
-void DrumSequencerPage::setBankIndex(int bankIndex) {
+void DrumSequencerMainPage::setBankIndex(int bankIndex) {
   if (bankIndex < 0) bankIndex = 0;
   if (bankIndex >= kBankCount) bankIndex = kBankCount - 1;
   if (bank_index_ == bankIndex) return;
@@ -395,7 +445,7 @@ void DrumSequencerPage::setBankIndex(int bankIndex) {
   withAudioGuard([&]() { mini_acid_.setDrumBankIndex(bank_index_); });
 }
 
-void DrumSequencerPage::withAudioGuard(const std::function<void()>& fn) {
+void DrumSequencerMainPage::withAudioGuard(const std::function<void()>& fn) {
   if (audio_guard_) {
     audio_guard_(fn);
     return;
@@ -403,7 +453,7 @@ void DrumSequencerPage::withAudioGuard(const std::function<void()>& fn) {
   fn();
 }
 
-bool DrumSequencerPage::handleEvent(UIEvent& ui_event) {
+bool DrumSequencerMainPage::handleEvent(UIEvent& ui_event) {
   if (pattern_bar_ && pattern_bar_->handleEvent(ui_event)) return true;
   if (bank_bar_ && bank_bar_->handleEvent(ui_event)) return true;
   if (Container::handleEvent(ui_event)) return true;
@@ -575,12 +625,7 @@ bool DrumSequencerPage::handleEvent(UIEvent& ui_event) {
   return false;
 }
 
-const std::string & DrumSequencerPage::getTitle() const {
-  static std::string title = "DRUM SEQUENCER";
-  return title;
-}
-
-void DrumSequencerPage::draw(IGfx& gfx) {
+void DrumSequencerMainPage::draw(IGfx& gfx) {
   bank_index_ = mini_acid_.currentDrumBankIndex();
   const Rect& bounds = getBoundaries();
   int x = bounds.x;
@@ -638,6 +683,65 @@ void DrumSequencerPage::draw(IGfx& gfx) {
     grid_component_->setBoundaries(Rect{x, grid_top, w, grid_h});
   }
   Container::draw(gfx);
+}
+} // namespace
+
+GlobalDrumSettingsPage::GlobalDrumSettingsPage(MiniAcid& mini_acid)
+  : mini_acid_(mini_acid) {
+  character_control_ = std::make_shared<LabelOptionComponent>(
+      "Character", COLOR_LABEL, COLOR_WHITE);
+  drum_engine_options_ = mini_acid_.getAvailableDrumEngines();
+  if (drum_engine_options_.empty()) {
+    drum_engine_options_ = {"808", "909", "606"};
+  }
+  character_control_->setOptions(drum_engine_options_);
+  addChild(character_control_);
+}
+
+bool GlobalDrumSettingsPage::handleEvent(UIEvent& ui_event) {
+  int before = character_control_ ? character_control_->optionIndex() : -1;
+  bool handled = Container::handleEvent(ui_event);
+  int after = character_control_ ? character_control_->optionIndex() : -1;
+  if (before != after) {
+    applyDrumEngineSelection();
+  }
+  return handled;
+}
+
+void GlobalDrumSettingsPage::draw(IGfx& gfx) {
+  const Rect& bounds = getBoundaries();
+  if (bounds.w <= 0 || bounds.h <= 0) return;
+  int x = bounds.x;
+  int y = bounds.y;
+  int w = bounds.w;
+
+  gfx.setTextColor(COLOR_LABEL);
+  gfx.drawText(x, y, "GLOBAL SETTINGS");
+  gfx.setTextColor(COLOR_WHITE);
+
+  int row_y = y + gfx.fontHeight() + 4;
+  if (character_control_) {
+    character_control_->setBoundaries(Rect{x, row_y, w, gfx.fontHeight()});
+  }
+  Container::draw(gfx);
+}
+
+void GlobalDrumSettingsPage::applyDrumEngineSelection() {
+  if (!character_control_) return;
+  int index = character_control_->optionIndex();
+  if (index < 0 || index >= static_cast<int>(drum_engine_options_.size())) return;
+  mini_acid_.setDrumEngine(drum_engine_options_[index]);
+}
+
+DrumSequencerPage::DrumSequencerPage(IGfx& gfx, MiniAcid& mini_acid, AudioGuard& audio_guard) {
+  (void)gfx;
+  addPage(std::make_shared<DrumSequencerMainPage>(mini_acid, audio_guard));
+  addPage(std::make_shared<GlobalDrumSettingsPage>(mini_acid));
+}
+
+const std::string & DrumSequencerPage::getTitle() const {
+  static std::string title = "DRUM SEQUENCER";
+  return title;
 }
 
 std::unique_ptr<MultiPageHelpDialog> DrumSequencerPage::getHelpDialog() {

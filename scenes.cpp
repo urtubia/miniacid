@@ -627,7 +627,11 @@ void SceneJsonObserver::onBool(bool value) { handlePrimitiveBool(value); }
 void SceneJsonObserver::onNull() {}
 
 void SceneJsonObserver::onString(const std::string& value) {
-  (void)value;
+  if (error_ || stackSize_ == 0) return;
+  Path path = stack_[stackSize_ - 1].path;
+  if (path == Path::State && lastKey_ == "drumEngine") {
+    drumEngineName_ = value;
+  }
 }
 
 void SceneJsonObserver::onObjectKey(const std::string& key) { lastKey_ = key; }
@@ -693,6 +697,8 @@ bool SceneJsonObserver::songMode() const { return songMode_; }
 
 int SceneJsonObserver::songPosition() const { return songPosition_; }
 
+const std::string& SceneJsonObserver::drumEngineName() const { return drumEngineName_; }
+
 void SceneManager::loadDefaultScene() {
   drumPatternIndex_ = 0;
   drumBankIndex_ = 0;
@@ -709,6 +715,7 @@ void SceneManager::loadDefaultScene() {
   synthDelay_[1] = false;
   synthParameters_[0] = SynthParameters();
   synthParameters_[1] = SynthParameters();
+  drumEngineName_ = "808";
   setBpm(100.0f);
   songMode_ = false;
   songPosition_ = 0;
@@ -947,6 +954,10 @@ const SynthParameters& SceneManager::getSynthParameters(int synthIdx) const {
   return synthParameters_[clampedSynth];
 }
 
+void SceneManager::setDrumEngineName(const std::string& name) { drumEngineName_ = name; }
+
+const std::string& SceneManager::getDrumEngineName() const { return drumEngineName_; }
+
 void SceneManager::setBpm(float bpm) {
   if (bpm < 40.0f) bpm = 40.0f;
   if (bpm > 200.0f) bpm = 200.0f;
@@ -1070,6 +1081,7 @@ void SceneManager::buildSceneDocument(ArduinoJson::JsonDocument& doc) const {
   state["bpm"] = bpm_;
   state["songMode"] = songMode_;
   state["songPosition"] = clampSongPosition(songPosition_);
+  state["drumEngine"] = drumEngineName_;
 
   ArduinoJson::JsonArray synthPatternIndices = state["synthPatternIndex"].to<ArduinoJson::JsonArray>();
   synthPatternIndices.add(synthPatternIndex_[0]);
@@ -1142,6 +1154,7 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
   bool hasSongObj = false;
   bool songMode = songMode_;
   int songPosition = songPosition_;
+  std::string drumEngineName = drumEngineName_;
 
   ArduinoJson::JsonObjectConst songObj = obj["song"].as<ArduinoJson::JsonObjectConst>();
   if (!songObj.isNull()) {
@@ -1192,6 +1205,11 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
       if (synthPatternIndexArr.size() > 1) synthPatternIndexB = valueToInt(synthPatternIndexArr[1], synthPatternIndexB);
     }
     drumBankIndex = valueToInt(state["drumBankIndex"], drumBankIndex);
+    if (state["drumEngine"].is<const char*>()) {
+      drumEngineName = state["drumEngine"].as<const char*>();
+    } else if (state["drumEngine"].is<std::string>()) {
+      drumEngineName = state["drumEngine"].as<std::string>();
+    }
     ArduinoJson::JsonArrayConst synthBankIndexArr = state["synthBankIndex"].as<ArduinoJson::JsonArrayConst>();
     if (!synthBankIndexArr.isNull()) {
       if (synthBankIndexArr.size() > 0) synthBankIndexA = valueToInt(synthBankIndexArr[0], synthBankIndexA);
@@ -1257,6 +1275,7 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
   synthDelay_[1] = synthDelay[1];
   synthParameters_[0] = synthParams[0];
   synthParameters_[1] = synthParams[1];
+  drumEngineName_ = drumEngineName;
   setSongLength(scene_.song.length);
   songPosition_ = clampSongPosition(songPosition);
   songMode_ = songMode;
@@ -1323,6 +1342,7 @@ bool SceneManager::loadSceneEventedWithReader(JsonVisitor::NextChar nextChar) {
   synthDelay_[1] = observer.synthDelayEnabled(1);
   synthParameters_[0] = observer.synthParameters(0);
   synthParameters_[1] = observer.synthParameters(1);
+  drumEngineName_ = observer.drumEngineName();
   setSongLength(scene_.song.length);
   songPosition_ = clampSongPosition(observer.songPosition());
   songMode_ = observer.songMode();
