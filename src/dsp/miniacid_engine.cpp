@@ -457,6 +457,18 @@ void MiniAcid::setSongMode(bool enabled) {
 
 void MiniAcid::toggleSongMode() { setSongMode(!songMode_); }
 
+bool MiniAcid::loopModeEnabled() const { return sceneManager_.loopMode(); }
+
+void MiniAcid::setLoopMode(bool enabled) { sceneManager_.setLoopMode(enabled); }
+
+void MiniAcid::setLoopRange(int startRow, int endRow) {
+  sceneManager_.setLoopRange(startRow, endRow);
+}
+
+int MiniAcid::loopStartRow() const { return sceneManager_.loopStartRow(); }
+
+int MiniAcid::loopEndRow() const { return sceneManager_.loopEndRow(); }
+
 int MiniAcid::songLength() const { return sceneManager_.songLength(); }
 
 int MiniAcid::currentSongPosition() const { return sceneManager_.getSongPosition(); }
@@ -839,7 +851,28 @@ void MiniAcid::applySongPositionSelection() {
 void MiniAcid::advanceSongPlayhead() {
   int len = sceneManager_.songLength();
   if (len < 1) len = 1;
-  songPlayheadPosition_ = (songPlayheadPosition_ + 1) % len;
+  int nextPos = (songPlayheadPosition_ + 1) % len;
+  if (sceneManager_.loopMode()) {
+    int loopStart = sceneManager_.loopStartRow();
+    int loopEnd = sceneManager_.loopEndRow();
+    if (loopStart < 0) loopStart = 0;
+    if (loopEnd < 0) loopEnd = 0;
+    if (loopStart >= len) loopStart = len - 1;
+    if (loopEnd >= len) loopEnd = len - 1;
+    if (loopStart > loopEnd) {
+      int tmp = loopStart;
+      loopStart = loopEnd;
+      loopEnd = tmp;
+    }
+    if (songPlayheadPosition_ < loopStart || songPlayheadPosition_ > loopEnd) {
+      nextPos = loopStart;
+    } else if (songPlayheadPosition_ >= loopEnd) {
+      nextPos = loopStart;
+    } else {
+      nextPos = songPlayheadPosition_ + 1;
+    }
+  }
+  songPlayheadPosition_ = nextPos;
   sceneManager_.setSongPosition(songPlayheadPosition_);
   applySongPositionSelection();
 }

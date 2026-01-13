@@ -169,6 +169,9 @@ public:
   bool hasSong() const;
   bool songMode() const;
   int songPosition() const;
+  bool loopMode() const;
+  int loopStartRow() const;
+  int loopEndRow() const;
   const std::string& drumEngineName() const;
 
 private:
@@ -239,6 +242,9 @@ private:
   bool hasSong_ = false;
   bool songMode_ = false;
   int songPosition_ = 0;
+  bool loopMode_ = false;
+  int loopStartRow_ = 0;
+  int loopEndRow_ = 0;
   std::string drumEngineName_ = "808";
 };
 
@@ -298,6 +304,11 @@ public:
   int getSongPosition() const;
   void setSongMode(bool enabled);
   bool songMode() const;
+  void setLoopMode(bool enabled);
+  bool loopMode() const;
+  void setLoopRange(int startRow, int endRow);
+  int loopStartRow() const;
+  int loopEndRow() const;
 
   template <typename TWriter>
   bool writeSceneJson(TWriter&& writer) const;
@@ -316,6 +327,7 @@ private:
   int clampSongLength(int length) const;
   int songTrackToIndex(SongTrack track) const;
   void trimSongLength();
+  void clampLoopRange();
   void clearSongData(Song& song) const;
   void buildSceneDocument(ArduinoJson::JsonDocument& doc) const;
   bool applySceneDocument(const ArduinoJson::JsonDocument& doc);
@@ -334,6 +346,9 @@ private:
   float bpm_ = 100.0f;
   bool songMode_ = false;
   int songPosition_ = 0;
+  bool loopMode_ = false;
+  int loopStartRow_ = 0;
+  int loopEndRow_ = 0;
   std::string drumEngineName_ = "808";
 };
 
@@ -505,6 +520,12 @@ bool SceneManager::writeSceneJson(TWriter&& writer) const {
   if (!writeBool(songMode_)) return false;
   if (!writeLiteral(",\"songPosition\":")) return false;
   if (!writeInt(clampSongPosition(songPosition_))) return false;
+  if (!writeLiteral(",\"loopMode\":")) return false;
+  if (!writeBool(loopMode_)) return false;
+  if (!writeLiteral(",\"loopStart\":")) return false;
+  if (!writeInt(loopStartRow_)) return false;
+  if (!writeLiteral(",\"loopEnd\":")) return false;
+  if (!writeInt(loopEndRow_)) return false;
   if (!writeLiteral(",\"synthPatternIndex\":[")) return false;
   if (!writeInt(synthPatternIndex_[0])) return false;
   if (!writeChar(',')) return false;

@@ -515,6 +515,14 @@ void SceneJsonObserver::handlePrimitiveNumber(double value, bool isInteger) {
       songMode_ = value != 0;
       return;
     }
+    if (lastKey_ == "loopStart") {
+      loopStartRow_ = static_cast<int>(value);
+      return;
+    }
+    if (lastKey_ == "loopEnd") {
+      loopEndRow_ = static_cast<int>(value);
+      return;
+    }
     int intValue = static_cast<int>(value);
     if (lastKey_ == "drumPatternIndex") {
       drumPatternIndex_ = intValue;
@@ -615,6 +623,8 @@ void SceneJsonObserver::handlePrimitiveBool(bool value) {
 
   if (path == Path::State && lastKey_ == "songMode") {
     songMode_ = value;
+  } else if (path == Path::State && lastKey_ == "loopMode") {
+    loopMode_ = value;
   }
 }
 
@@ -697,6 +707,12 @@ bool SceneJsonObserver::songMode() const { return songMode_; }
 
 int SceneJsonObserver::songPosition() const { return songPosition_; }
 
+bool SceneJsonObserver::loopMode() const { return loopMode_; }
+
+int SceneJsonObserver::loopStartRow() const { return loopStartRow_; }
+
+int SceneJsonObserver::loopEndRow() const { return loopEndRow_; }
+
 const std::string& SceneJsonObserver::drumEngineName() const { return drumEngineName_; }
 
 void SceneManager::loadDefaultScene() {
@@ -719,6 +735,9 @@ void SceneManager::loadDefaultScene() {
   setBpm(100.0f);
   songMode_ = false;
   songPosition_ = 0;
+  loopMode_ = false;
+  loopStartRow_ = 0;
+  loopEndRow_ = 0;
   clearSongData(scene_.song);
   scene_.song.length = 1;
   scene_.song.positions[0].patterns[0] = 0;
@@ -1002,6 +1021,7 @@ void SceneManager::setSongLength(int length) {
   scene_.song.length = clamped;
   if (songPosition_ >= scene_.song.length) songPosition_ = scene_.song.length - 1;
   if (songPosition_ < 0) songPosition_ = 0;
+  clampLoopRange();
 }
 
 int SceneManager::songLength() const {
@@ -1022,6 +1042,25 @@ int SceneManager::getSongPosition() const {
 void SceneManager::setSongMode(bool enabled) { songMode_ = enabled; }
 
 bool SceneManager::songMode() const { return songMode_; }
+
+void SceneManager::setLoopMode(bool enabled) {
+  loopMode_ = enabled;
+  if (loopMode_) {
+    clampLoopRange();
+  }
+}
+
+bool SceneManager::loopMode() const { return loopMode_; }
+
+void SceneManager::setLoopRange(int startRow, int endRow) {
+  loopStartRow_ = startRow;
+  loopEndRow_ = endRow;
+  clampLoopRange();
+}
+
+int SceneManager::loopStartRow() const { return loopStartRow_; }
+
+int SceneManager::loopEndRow() const { return loopEndRow_; }
 
 void SceneManager::setCurrentBankIndex(int instrumentId, int bankIdx) {
   int clampedBank = clampBankIndex(bankIdx);
@@ -1081,6 +1120,9 @@ void SceneManager::buildSceneDocument(ArduinoJson::JsonDocument& doc) const {
   state["bpm"] = bpm_;
   state["songMode"] = songMode_;
   state["songPosition"] = clampSongPosition(songPosition_);
+  state["loopMode"] = loopMode_;
+  state["loopStart"] = loopStartRow_;
+  state["loopEnd"] = loopEndRow_;
   state["drumEngine"] = drumEngineName_;
 
   ArduinoJson::JsonArray synthPatternIndices = state["synthPatternIndex"].to<ArduinoJson::JsonArray>();
@@ -1154,6 +1196,9 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
   bool hasSongObj = false;
   bool songMode = songMode_;
   int songPosition = songPosition_;
+  bool loopMode = false;
+  int loopStartRow = 0;
+  int loopEndRow = 0;
   std::string drumEngineName = drumEngineName_;
 
   ArduinoJson::JsonObjectConst songObj = obj["song"].as<ArduinoJson::JsonObjectConst>();
@@ -1244,6 +1289,9 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
     }
     songMode = state["songMode"].is<bool>() ? state["songMode"].as<bool>() : songMode;
     songPosition = valueToInt(state["songPosition"], songPosition);
+    loopMode = state["loopMode"].is<bool>() ? state["loopMode"].as<bool>() : loopMode;
+    loopStartRow = valueToInt(state["loopStart"], loopStartRow);
+    loopEndRow = valueToInt(state["loopEnd"], loopEndRow);
   }
 
   if (!hasSongObj) {
@@ -1279,6 +1327,10 @@ bool SceneManager::applySceneDocument(const ArduinoJson::JsonDocument& doc) {
   setSongLength(scene_.song.length);
   songPosition_ = clampSongPosition(songPosition);
   songMode_ = songMode;
+  loopMode_ = loopMode;
+  loopStartRow_ = loopStartRow;
+  loopEndRow_ = loopEndRow;
+  clampLoopRange();
   setBpm(bpm);
   return true;
 }
@@ -1346,6 +1398,10 @@ bool SceneManager::loadSceneEventedWithReader(JsonVisitor::NextChar nextChar) {
   setSongLength(scene_.song.length);
   songPosition_ = clampSongPosition(observer.songPosition());
   songMode_ = observer.songMode();
+  loopMode_ = observer.loopMode();
+  loopStartRow_ = observer.loopStartRow();
+  loopEndRow_ = observer.loopEndRow();
+  clampLoopRange();
   setBpm(observer.bpm());
   return true;
 }
@@ -1406,8 +1462,24 @@ void SceneManager::trimSongLength() {
   int newLength = lastUsed >= 0 ? lastUsed + 1 : 1;
   scene_.song.length = clampSongLength(newLength);
   if (songPosition_ >= scene_.song.length) songPosition_ = scene_.song.length - 1;
+  clampLoopRange();
 }
 
 void SceneManager::clearSongData(Song& song) const {
   clearSong(song);
+}
+
+void SceneManager::clampLoopRange() {
+  int len = songLength();
+  int maxPos = len - 1;
+  if (maxPos < 0) maxPos = 0;
+  if (loopStartRow_ < 0) loopStartRow_ = 0;
+  if (loopEndRow_ < 0) loopEndRow_ = 0;
+  if (loopStartRow_ > maxPos) loopStartRow_ = maxPos;
+  if (loopEndRow_ > maxPos) loopEndRow_ = maxPos;
+  if (loopStartRow_ > loopEndRow_) {
+    int tmp = loopStartRow_;
+    loopStartRow_ = loopEndRow_;
+    loopEndRow_ = tmp;
+  }
 }

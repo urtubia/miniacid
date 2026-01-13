@@ -30,6 +30,7 @@ class SongPage : public IPage, public IMultiHelpFramesProvider {
   void startSelection();
   void updateSelection();
   void clearSelection();
+  void updateLoopRangeFromSelection();
   void getSelectionBounds(int& min_row, int& max_row, int& min_track, int& max_track) const;
   SongTrack trackForColumn(int col, bool& valid) const;
   int bankIndexForTrack(SongTrack track) const;
@@ -39,6 +40,7 @@ class SongPage : public IPage, public IMultiHelpFramesProvider {
   bool assignPattern(int patternIdx);
   bool clearPattern();
   bool toggleSongMode();
+  bool toggleLoopMode();
 
   IGfx& gfx_;
   MiniAcid& mini_acid_;

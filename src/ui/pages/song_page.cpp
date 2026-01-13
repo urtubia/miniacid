@@ -121,6 +121,22 @@ void SongPage::updateSelection() {
 
 void SongPage::clearSelection() {
   has_selection_ = false;
+  if (mini_acid_.loopModeEnabled()) {
+    withAudioGuard([&]() { mini_acid_.setLoopMode(false); });
+  }
+}
+
+void SongPage::updateLoopRangeFromSelection() {
+  if (!mini_acid_.loopModeEnabled()) return;
+  if (!has_selection_) {
+    withAudioGuard([&]() { mini_acid_.setLoopMode(false); });
+    return;
+  }
+  int min_row, max_row, min_track, max_track;
+  getSelectionBounds(min_row, max_row, min_track, max_track);
+  (void)min_track;
+  (void)max_track;
+  withAudioGuard([&]() { mini_acid_.setLoopRange(min_row, max_row); });
 }
 
 void SongPage::getSelectionBounds(int& min_row, int& max_row, int& min_track, int& max_track) const {
@@ -147,6 +163,9 @@ void SongPage::moveCursorHorizontal(int delta, bool extend_selection) {
   if (track > 4) track = 4;
   cursor_track_ = track;
   syncSongPositionToCursor();
+  if (extend_selection) {
+    updateLoopRangeFromSelection();
+  }
 }
 
 void SongPage::moveCursorVertical(int delta, bool extend_selection) {
@@ -165,6 +184,9 @@ void SongPage::moveCursorVertical(int delta, bool extend_selection) {
   row = clampCursorRow(row);
   cursor_row_ = row;
   syncSongPositionToCursor();
+  if (extend_selection) {
+    updateLoopRangeFromSelection();
+  }
 }
 
 void SongPage::syncSongPositionToCursor() {
@@ -294,6 +316,23 @@ bool SongPage::clearPattern() {
 
 bool SongPage::toggleSongMode() {
   withAudioGuard([&]() { mini_acid_.toggleSongMode(); });
+  return true;
+}
+
+bool SongPage::toggleLoopMode() {
+  if (mini_acid_.loopModeEnabled()) {
+    withAudioGuard([&]() { mini_acid_.setLoopMode(false); });
+    return true;
+  }
+  if (!has_selection_) return false;
+  int min_row, max_row, min_track, max_track;
+  getSelectionBounds(min_row, max_row, min_track, max_track);
+  (void)min_track;
+  (void)max_track;
+  withAudioGuard([&]() {
+    mini_acid_.setLoopRange(min_row, max_row);
+    mini_acid_.setLoopMode(true);
+  });
   return true;
 }
 
@@ -583,6 +622,10 @@ bool SongPage::handleEvent(UIEvent& ui_event) {
   char key = ui_event.key;
   if (!key) return false;
 
+  if (ui_event.ctrl && (key == 'l' || key == 'L')) {
+    return toggleLoopMode();
+  }
+
   if (cursorOnModeButton() && (key == '\n' || key == '\r')) {
     return toggleSongMode();
   }
@@ -631,6 +674,7 @@ void SongPage::draw(IGfx& gfx) {
   int cursor_row = cursorRow();
   int playhead = mini_acid_.songPlayheadPosition();
   bool playingSong = mini_acid_.isPlaying() && mini_acid_.songModeEnabled();
+  bool loopMode = mini_acid_.loopModeEnabled();
 
   if (playingSong) {
     int minTarget = std::min(cursor_row, playhead);
@@ -666,6 +710,17 @@ void SongPage::draw(IGfx& gfx) {
     gfx.drawRect(lenX - 2, body_y - 1, lenW + 4, label_h + 2, COLOR_STEP_SELECTED);
   }
   gfx.drawText(lenX, body_y, lenBuf);
+
+  if (loopMode) {
+    int loopStart = mini_acid_.loopStartRow();
+    int loopEnd = mini_acid_.loopEndRow();
+    char loopBuf[24];
+    snprintf(loopBuf, sizeof(loopBuf), "LOOP %d-%d", loopStart + 1, loopEnd + 1);
+    int loopX = lenX + lenW + 8;
+    gfx.setTextColor(IGfxColor::Yellow());
+    gfx.drawText(loopX, body_y, loopBuf);
+    gfx.setTextColor(COLOR_WHITE);
+  }
 
   int modeX = x + w - modeBtnW;
   int modeY = body_y - 2 + 30;

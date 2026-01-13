@@ -112,6 +112,11 @@ public:
   bool songModeEnabled() const;
   void setSongMode(bool enabled);
   void toggleSongMode();
+  bool loopModeEnabled() const;
+  void setLoopMode(bool enabled);
+  void setLoopRange(int startRow, int endRow);
+  int loopStartRow() const;
+  int loopEndRow() const;
   int songLength() const;
   int currentSongPosition() const;
   int songPlayheadPosition() const;
